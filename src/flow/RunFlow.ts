@@ -6,6 +6,7 @@ import { GameState } from "../core/GameState";
 import { zoneAt } from "../level/Zones";
 import { recordEscape } from "../ui/records";
 import { ReplayRecorder } from "../replay/ReplayRecorder";
+import { deriveTags, fingerprint } from "../ai/BehaviorProfiler";
 
 const MENU_CAT = new THREE.Vector3(-18.6, 0, 13.4);
 /** Menu camera relative to the hero cat (cat sits right of frame). */
@@ -273,9 +274,14 @@ export function registerRunFlow(g: Game): void {
       g.replay = g.recorder.finish(g.runTime, () => g.snapshotRunner(), true);
       g.history.tick(g.runTime, true);
       recordEscape(g.runTime);
-      // Ask the Tactical Director now, while the end-of-run beats play.
+      // Profile the run and ask the Tactical Director now, while the
+      // end-of-run beats play.
+      const summary = g.telemetry.summary();
+      g.fingerprint = fingerprint(summary);
+      g.profileTags = deriveTags(g.fingerprint);
+      g.debug?.log(`profile: ${g.profileTags.map((tg) => tg.title).join(", ")}`);
       g.plan = null;
-      g.planRequest = g.director.analyze(g.telemetry.summary());
+      g.planRequest = g.director.analyze(summary);
       g.runner.setForcedAction("victory");
       g.runner.meow();
       g.audio.play("victory", { volume: 0.55 });

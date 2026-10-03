@@ -32,6 +32,12 @@ export interface TelemetrySummary {
   dangerEncounters: number;
   jumps: number;
   longestStandStill: number;
+  /** Total seconds spent standing still (hesitation). */
+  stillTime: number;
+  /** Rival pounces this thief answered with a Perfect Hiss. */
+  perfectHisses: number;
+  /** Every zone change, including going back into a zone (backtracking). */
+  zoneChanges: number;
 }
 
 /**
@@ -65,6 +71,9 @@ export class TelemetryTracker {
       dangerEncounters: 0,
       jumps: 0,
       longestStandStill: 0,
+      stillTime: 0,
+      perfectHisses: 0,
+      zoneChanges: 0,
     };
   }
 
@@ -81,6 +90,7 @@ export class TelemetryTracker {
     const s = this.s;
     s.runDuration = t;
     if (zone && zone !== this.lastZone) {
+      if (this.lastZone) s.zoneChanges++;
       if (s.zoneEntryTimes[zone] === undefined) s.zoneEntryTimes[zone] = t;
       this.lastZone = zone;
       if (zone === "yard") s.routeChoice.awningShortcut = true;
@@ -95,6 +105,7 @@ export class TelemetryTracker {
       if (d < 20) this.distance += d;
       if (d / Math.max(dt, 1e-4) < 0.3) {
         this.stillTime += dt;
+        s.stillTime += dt;
         s.longestStandStill = Math.max(s.longestStandStill, this.stillTime);
       } else this.stillTime = 0;
     }
@@ -123,6 +134,9 @@ export class TelemetryTracker {
   }
   onJump(): void {
     this.s.jumps++;
+  }
+  onPerfectHiss(): void {
+    this.s.perfectHisses++;
   }
 
   summary(): TelemetrySummary {

@@ -19,6 +19,7 @@ const REWIND_SECONDS = 3.2;
 export function registerTransitionFlow(g: Game): void {
   let t = 0;
   let planShown = false;
+  let profileShown = false;
   let pending: Promise<TacticalPlan> | null = null;
   let resolved: TacticalPlan | null = null;
   let streak: THREE.Mesh | null = null;
@@ -33,6 +34,7 @@ export function registerTransitionFlow(g: Game): void {
     enter: () => {
       t = 0;
       planShown = false;
+      profileShown = false;
       resolved = null;
       // The request was started when the run ended; reuse it.
       pending = g.planRequest ?? g.director.analyze(g.telemetry.summary());
@@ -64,17 +66,27 @@ export function registerTransitionFlow(g: Game): void {
         r.updateScripted(dt);
       }
       g.camera.update(dt, null, null);
-      if (!resolved && t > 2.4) resolved = heuristicPlan(g.telemetry.summary());
-      if (resolved && !planShown && t > 1.3) {
+      // One behavior insight first: what the council noticed about you.
+      const tag = g.profileTags[0];
+      if (tag && !profileShown && t > 1.2) {
+        profileShown = true;
+        g.stamps.clear(false);
+        g.stamps.show("PLAYER PROFILE", "council", true);
+        g.stamps.show(tag.title, "strategy", false, tag.detail);
+        g.audio.play("stamp", { volume: 0.5 });
+      }
+      const planAt = tag ? 2.9 : 1.3;
+      if (!resolved && t > planAt + 1.1) resolved = heuristicPlan(g.telemetry.summary());
+      if (resolved && !planShown && t > planAt) {
         planShown = true;
         g.plan = resolved;
         g.stamps.clear(false);
         g.stamps.show(resolved.name, "strategy", false, resolved.line);
         g.audio.play("stamp", { volume: 0.6 });
         g.debug?.log(`director (${resolved.source}): ${resolved.name} — ${resolved.reasons.join("; ")}`);
-        t = 1.3;
+        t = planAt;
       }
-      if (planShown && t > 3.2) g.fsm.transition(GameState.REWIND);
+      if (planShown && t > planAt + 1.9) g.fsm.transition(GameState.REWIND);
     },
     exit: () => {
       g.stamps.clear();

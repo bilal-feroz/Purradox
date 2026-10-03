@@ -5,6 +5,7 @@ import { PALETTE } from "../data/palette";
 import { AudioManager } from "../audio/AudioManager";
 import { TacticalDirector, HttpStrategyProvider } from "../ai/TacticalDirector";
 import type { TacticalPlan } from "../ai/TacticalFallback";
+import type { BehaviorFingerprint, BehaviorTag } from "../ai/BehaviorProfiler";
 import { TelemetryTracker } from "../ai/TelemetrySummary";
 import { CatActor } from "../cats/CatActor";
 import { RivalBrain, type AIWorld } from "../cats/CatAI";
@@ -131,6 +132,10 @@ export class Game {
   controlled: CatActor | null = null;
   replay: ReplayData | null = null;
   plan: TacticalPlan | null = null;
+  /** How this human played Round 1 (Behavior Profiler). */
+  fingerprint: BehaviorFingerprint | null = null;
+  /** Tags derived from the fingerprint, most distinctive first. */
+  profileTags: BehaviorTag[] = [];
   /** In-flight Tactical Director request (started when the run ends). */
   planRequest: Promise<TacticalPlan> | null = null;
   hunterId: CatId | null = null;
@@ -434,7 +439,10 @@ export class Game {
       if (involvesPlayer || this.round === 2) this.alert("PERFECT HISS!", "perfect");
       if (this.round === 2 && this.controlled && e.hisser === this.controlled.id) this.huntStats.perfectHisses++;
       if (this.round === 2 && e.hisser === this.runnerId) this.huntStats.echoPerfectHisses++;
-      if (this.round === 1 && e.hisser === this.runnerId) this.huntStats.perfectHisses++;
+      if (this.round === 1 && e.hisser === this.runnerId) {
+        this.huntStats.perfectHisses++;
+        if (isRunRecording()) this.telemetry.onPerfectHiss();
+      }
     });
     // The thief's paws give it away to cats close by (sprinting is louder).
     this.bus.on("footstep", (e) => {
