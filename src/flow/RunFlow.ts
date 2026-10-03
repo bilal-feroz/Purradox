@@ -280,6 +280,7 @@ export function registerRunFlow(g: Game): void {
       // Profile the run and ask the Tactical Director now, while the
       // end-of-run beats play.
       const summary = g.telemetry.summary();
+      g.runSummary = summary;
       g.fingerprint = fingerprint(summary);
       g.profileTags = deriveTags(g.fingerprint);
       g.debug?.log(`profile: ${g.profileTags.map((tg) => tg.title).join(", ")}`);

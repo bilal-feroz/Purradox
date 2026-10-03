@@ -8,7 +8,7 @@ import type { BehaviorFingerprint, BehaviorTag } from "../ai/BehaviorProfiler";
 import type { SimResult, TraceInfo } from "../ai/CounterfactualSimulator";
 import type { Coordinator } from "../ai/Coordinator";
 import type { CouncilPlan } from "../ai/TacticalPlanner";
-import { TelemetryTracker } from "../ai/TelemetrySummary";
+import { TelemetryTracker, type TelemetrySummary } from "../ai/TelemetrySummary";
 import { CatActor } from "../cats/CatActor";
 import { RivalBrain, type AIWorld } from "../cats/CatAI";
 import { CombatSystem } from "../combat/CombatSystem";
@@ -51,6 +51,7 @@ import { registerRunFlow } from "../flow/RunFlow";
 import { registerTransitionFlow } from "../flow/TransitionFlow";
 import { registerHuntFlow } from "../flow/HuntFlow";
 import { DebugOverlay } from "../debug/DebugOverlay";
+import { AiDebugPanel } from "../debug/AiDebugPanel";
 
 export interface HuntStats {
   perfectHisses: number;
@@ -98,6 +99,8 @@ export class Game {
   readonly director: TacticalDirector;
   readonly graph = new WaypointGraph();
   readonly debug: DebugOverlay | null;
+  /** ?aiDebug=1 judge mode: the AI pipeline's data, on screen. */
+  readonly aiDebug: AiDebugPanel | null;
 
   physics!: PhysicsWorld;
   sky!: Sky;
@@ -143,6 +146,8 @@ export class Game {
   sim: SimResult | null = null;
   /** Round 2 ally coordinator (discrete re-planning). */
   coordinator: Coordinator | null = null;
+  /** Round 1 telemetry summary the fingerprint was computed from. */
+  runSummary: TelemetrySummary | null = null;
   /** How this human played Round 1 (Behavior Profiler). */
   fingerprint: BehaviorFingerprint | null = null;
   /** Tags derived from the fingerprint, most distinctive first. */
@@ -211,6 +216,7 @@ export class Game {
     this.fadeEl.id = "fade";
     uiRoot.appendChild(this.fadeEl);
     this.debug = params.get("debug") === "1" ? new DebugOverlay(this, uiRoot) : null;
+    this.aiDebug = params.get("aiDebug") === "1" ? new AiDebugPanel(this, uiRoot) : null;
     this.applySettings(this.settings);
   }
 
@@ -966,6 +972,7 @@ export class Game {
     this.audio.setListener(this.camera.camera.position);
     this.audio.update(this.time.realDt, !this.fsm.is(GameState.BOOT));
     this.debug?.update();
+    this.aiDebug?.update(this.time.realDt);
     this.updateTracker();
     if (this.renderEnabled) this.renderer.render(this.scene, this.photoCamera ?? this.camera.camera, this.time.realTime);
     this.input.endFrame(this.time.realDt);
