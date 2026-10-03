@@ -36,6 +36,9 @@ export class HUD {
   private readonly prompt: HTMLDivElement;
   private readonly promptText: HTMLSpanElement;
   private readonly alerts: HTMLDivElement;
+  private readonly tracker: HTMLDivElement;
+  private readonly trackerArrow: HTMLDivElement;
+  private trackerClass = "";
   private lastGrip = 3;
   private objectiveVisibleUntil = 0;
 
@@ -92,6 +95,11 @@ export class HUD {
       pounce: mk("pounce", ICONS.pounce, "POUNCE", "LMB"),
     };
     this.root.appendChild(br);
+
+    this.tracker = el("div", "tracker hide");
+    this.tracker.innerHTML = `<div class="trk-arrow"></div><div class="trk-bubble">${ICONS.fish()}</div>`;
+    this.trackerArrow = this.tracker.querySelector(".trk-arrow") as HTMLDivElement;
+    this.root.appendChild(this.tracker);
 
     this.prompt = el("div", "prompt hide");
     this.prompt.innerHTML = `<b>E</b>`;
@@ -203,6 +211,21 @@ export class HUD {
     }
     a.ready = ready;
     a.active = active;
+  }
+
+  /**
+   * Fish marker: floats over whoever holds the fish (or the loose fish) and
+   * pins to the screen edge with an arrow when it is off-screen.
+   */
+  setTracker(x: number, y: number, edge: boolean, angle: number, variant: "rival" | "echo" | "loose" | null): void {
+    const cls = variant ? `tracker ${variant}${edge ? " edge" : ""}` : "tracker hide";
+    if (cls !== this.trackerClass) {
+      this.tracker.className = cls;
+      this.trackerClass = cls;
+    }
+    if (!variant) return;
+    this.tracker.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    if (edge) this.trackerArrow.style.transform = `rotate(${angle.toFixed(3)}rad)`;
   }
 
   /** Brief glow on an ability button ("use this now"). */

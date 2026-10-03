@@ -142,6 +142,7 @@ export class Game {
   private dustTimer = 0;
   private scentT = 99;
   readonly tmp = new THREE.Vector3();
+  private readonly trackPos = new THREE.Vector3();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -704,6 +705,45 @@ export class Game {
     }
   }
 
+  /** Project the fish (or its holder) into the HUD tracker. */
+  private updateTracker(): void {
+    let variant: "rival" | "echo" | "loose" | null = null;
+    const f = this.fish;
+    const p = this.trackPos;
+    if (this.fsm.is(GameState.FISH_RUN, GameState.HUNT) && !this.photoCamera) {
+      if (f.state === "carried" && f.owner && f.owner !== this.controlled) {
+        variant = this.round === 2 && f.owner === this.fishCat ? "echo" : "rival";
+        p.copy(f.owner.position).setY(f.owner.position.y + 0.95);
+      } else if (f.state === "loose" || f.state === "flying") {
+        variant = "loose";
+        p.copy(f.position).setY(f.position.y + 0.5);
+      }
+    }
+    if (!variant) {
+      this.hud.setTracker(0, 0, false, 0, null);
+      return;
+    }
+    const cam = this.camera.camera;
+    cam.updateMatrixWorld();
+    p.applyMatrix4(cam.matrixWorldInverse);
+    const behind = p.z > -0.2;
+    p.applyMatrix4(cam.projectionMatrix);
+    let x = behind ? -p.x : p.x;
+    let y = behind ? -p.y : p.y;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    if (!behind && Math.abs(x) < 0.94 && Math.abs(y) < 0.86) {
+      this.hud.setTracker((x * 0.5 + 0.5) * W, (-y * 0.5 + 0.5) * H, false, 0, variant);
+      return;
+    }
+    if (Math.hypot(x, y) < 1e-3) y = -1;
+    // pin to an inset rectangle along the direction of the target
+    const k = 1 / Math.max(Math.abs(x) / 0.86, Math.abs(y) / 0.7);
+    x *= k;
+    y *= k;
+    this.hud.setTracker((x * 0.5 + 0.5) * W, (-y * 0.5 + 0.5) * H, true, Math.atan2(-y * H, x * W), variant);
+  }
+
   /** Follow-camera on the controlled cat. */
   updateFollowCamera(dt: number): void {
     const ctl = this.controlled;
@@ -732,6 +772,7 @@ export class Game {
     this.audio.setListener(this.camera.camera.position);
     this.audio.update(this.time.realDt, !this.fsm.is(GameState.BOOT));
     this.debug?.update();
+    this.updateTracker();
     if (this.renderEnabled) this.renderer.render(this.scene, this.photoCamera ?? this.camera.camera, this.time.realTime);
     this.input.endFrame(this.time.realDt);
   }

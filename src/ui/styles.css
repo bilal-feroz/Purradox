@@ -681,6 +681,137 @@ body {
     0 6px 0 3px rgba(0, 0, 0, 0.3);
 }
 
+/* fish tracker (who has the fish / where it fell) */
+.tracker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 0.2s ease;
+}
+
+.tracker.hide {
+  opacity: 0;
+}
+
+.tracker .trk-bubble {
+  position: absolute;
+  left: -20px;
+  top: -50px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--cream);
+  border: 3px solid var(--ink);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28);
+  display: grid;
+  place-items: center;
+  animation: trk-bob 1.1s ease-in-out infinite;
+}
+
+.tracker .trk-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  transform: translateX(-50%);
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 9px solid var(--ink);
+}
+
+.tracker .trk-bubble svg {
+  width: 30px;
+  height: 30px;
+}
+
+.tracker.rival .trk-bubble {
+  background: #ffd9b8;
+}
+
+.tracker.echo .trk-bubble {
+  background: #c9f6ec;
+  border-color: var(--teal-dark);
+}
+
+.tracker.echo .trk-bubble::after {
+  border-top-color: var(--teal-dark);
+}
+
+.tracker.loose .trk-bubble {
+  background: #fff1a8;
+}
+
+.tracker.edge .trk-bubble {
+  top: -20px;
+  animation: none;
+}
+
+.tracker.edge .trk-bubble::after {
+  display: none;
+}
+
+.tracker .trk-arrow {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+
+.tracker.edge .trk-arrow {
+  display: block;
+}
+
+.tracker .trk-arrow::before,
+.tracker .trk-arrow::after {
+  content: "";
+  position: absolute;
+  border-style: solid;
+  border-color: transparent;
+}
+
+/* outlined triangle: ink outer, bubble-coloured inner */
+.tracker .trk-arrow::before {
+  left: 22px;
+  top: -13px;
+  border-width: 13px 0 13px 19px;
+  border-left-color: var(--ink);
+}
+
+.tracker .trk-arrow::after {
+  left: 24px;
+  top: -8px;
+  border-width: 8px 0 8px 12px;
+  border-left-color: #ffd9b8;
+}
+
+.tracker.echo .trk-arrow::before {
+  border-left-color: var(--teal-dark);
+}
+
+.tracker.echo .trk-arrow::after {
+  border-left-color: #c9f6ec;
+}
+
+.tracker.loose .trk-arrow::after {
+  border-left-color: #fff1a8;
+}
+
+@keyframes trk-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
 .ability.cue .ring {
   animation: cue-pulse 0.5s ease-out;
 }
