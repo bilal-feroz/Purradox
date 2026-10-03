@@ -2250,6 +2250,15 @@ body {
   color: #ffb3a1;
 }
 
+.comic-pop.sleep span {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 17px;
+  color: #e9f3f6;
+  -webkit-text-stroke: 3px #4b5d68;
+  letter-spacing: 2px;
+}
+
 .comic-pop.notice span {
   color: #ffd166;
   font-size: 30px;

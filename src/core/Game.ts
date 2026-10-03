@@ -19,6 +19,7 @@ import { PigeonFlock } from "../level/Pigeons";
 import { ResetManager } from "../level/ResetManager";
 import { buildSardineStreet } from "../level/SardineStreet";
 import { GoalBeacon } from "../level/GoalBeacon";
+import { Newspaper, SleepingDog } from "../level/Ambient";
 import { WaypointGraph } from "../level/WaypointGraph";
 import { isElevated, zoneAt } from "../level/Zones";
 import { PhysicsWorld } from "../physics/PhysicsWorld";
@@ -114,6 +115,9 @@ export class Game {
   combat!: CombatSystem;
   interactables!: Interactables;
   pigeons!: PigeonFlock;
+  /** Personality details: the market dog and the first alley's newspaper. */
+  dog!: SleepingDog;
+  newspaper!: Newspaper;
   /** Every cat in the world (any of them can be the thief). */
   readonly actors = {} as Record<CatId, CatActor>;
   /** AI brain per cat; used whenever the game (not a human) drives it. */
@@ -274,6 +278,8 @@ export class Game {
     await nextFrame();
     this.interactables = new Interactables(this.scene, this.materials, this.physics);
     this.pigeons = new PigeonFlock(this.scene, this.materials, this.bus, this.effects);
+    this.dog = new SleepingDog(this.scene, this.materials, new THREE.Vector3(-8.3, 0, 21.6), -2.2);
+    this.newspaper = new Newspaper(this.scene, this.materials, new THREE.Vector3(22.2, this.physics.groundHeight(22.2, 5, 12.5, 10) ?? 1, 12.5), new THREE.Vector3(0.15, 0, -1), this.physics);
     this.registerResettables();
     this.wireEvents();
     registerRunFlow(this);
@@ -331,6 +337,8 @@ export class Game {
     });
     for (const it of this.interactables.list) this.resets.register(it);
     this.resets.register(this.pigeons);
+    this.resets.register(this.dog);
+    this.resets.register(this.newspaper);
     this.resets.add("effects", () => {
       this.effects.clear();
       this.prints.clear();
@@ -408,6 +416,21 @@ export class Game {
       const me = this.controlled;
       if (me && me.team !== cat.team && me.abilities.hissReady && me.position.distanceTo(cat.position) < 8) this.hud.cue("hiss");
     });
+    // the market dog wakes (one eye) at chaos nearby; the newspaper blows away
+    this.bus.on("pigeonsBurst", (e) => {
+      this.dog.disturb(e, 14);
+      this.newspaper.disturb(e, 6);
+    });
+    this.bus.on("pounceHit", (e) => this.dog.disturb(e, 8));
+    this.bus.on("fishDrop", (e) => this.dog.disturb(e, 8));
+    this.bus.on("hissStart", (e) => {
+      this.dog.disturb(e, 6);
+      this.newspaper.disturb(e, 2.5);
+    });
+    this.dog.onSnore = (at) => {
+      if (this.paused || !this.fsm.is(GameState.INTRO, GameState.FISH_RUN, GameState.HUNT)) return;
+      if (this.camera.camera.position.distanceTo(at) < 14) this.pops.pop("zzz", () => at, "sleep", "dog:zzz", 4);
+    };
     // comic words over the cats (occasional: rate limited, capped, culled)
     const popAt = (id: CatId) => () => (this.actors[id].rig.root.visible ? this.actors[id].position : null);
     const popsOn = () => !this.paused && this.fsm.is(GameState.INTRO, GameState.FISH_RUN, GameState.HUNT);
@@ -494,6 +517,8 @@ export class Game {
     // AI hearing: every game-driven cat within earshot decides how to react
     this.bus.on("sound", (e) => {
       for (const c of this.cats) if (c.mode === "ai") this.brains[c.id].hear(e);
+      this.dog.disturb(e, Math.min(16, e.radius));
+      this.newspaper.disturb(e, Math.min(6, e.radius));
       // every cat in earshot flicks the ear on that side
       for (const c of this.cats) {
         if (!c.active) continue;
@@ -1023,6 +1048,10 @@ export class Game {
     this.escapeBeacon.update(this.time.realTime, this.camera.camera.position, thief !== null, false, true);
     this.effects.update(this.fsm.is(GameState.REWIND) ? this.time.realDt : dt, this.camera.camera);
     this.prints.update(dt, this.time.realTime);
+    if (!this.fsm.is(GameState.REWIND)) {
+      this.dog.update(dt, this.cats);
+      this.newspaper.update(dt, this.cats);
+    }
     this.lighting.setFocus(this.controlled ? this.controlled.position : this.camera.pivot);
     this.lighting.update(this.time.realDt);
     this.audio.setListener(this.camera.camera.position);

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-export type PopKind = "meow" | "hiss" | "notice";
+export type PopKind = "meow" | "hiss" | "notice" | "sleep";
 
 interface Pop {
   el: HTMLDivElement;
@@ -49,7 +49,7 @@ export class ComicPops {
     el.style.display = "none";
     this.root.appendChild(el);
     // a rival spotting you is worth seeing from further away
-    this.pops.push({ el, pos: at.clone(), t: 0, follow, range: kind === "notice" ? 36 : 24 });
+    this.pops.push({ el, pos: at.clone(), t: 0, follow, range: kind === "notice" ? 36 : kind === "sleep" ? 14 : 24 });
   }
 
   update(dt: number, camera: THREE.Camera): void {
@@ -68,7 +68,7 @@ export class ComicPops {
       const f = p.follow();
       if (f) p.pos.copy(f);
       this.v.copy(p.pos);
-      this.v.y += 0.75 + p.t * 0.45;
+      this.v.y += (p.el.classList.contains("sleep") ? 0.25 : 0.75) + p.t * 0.45;
       const d = this.v.distanceTo(camera.position);
       this.v.project(camera);
       const visible = d < p.range && this.v.z < 1 && Math.abs(this.v.x) < 1.05 && Math.abs(this.v.y) < 1.05;

@@ -109,6 +109,8 @@ export class Autopilot {
     g.input.setVirtual({ x: nx * rx + nz * rz, y: nx * fx + nz * fz }, held);
     if (d > this.lastD - 0.003) this.stuck++;
     else this.stuck = 0;
+    // body-blocked by a rival: do what a player would and pounce through it
+    if (this.stuck === 50 || this.stuck === 100) g.input.press("pounce");
     this.lastD = Math.min(this.lastD, d);
     if (this.stuck > 150) {
       this.log.push(`STUCK ${this.idx} at ${a.position.x.toFixed(2)},${a.position.y.toFixed(2)},${a.position.z.toFixed(2)} → ${tx},${ty},${tz}`);
