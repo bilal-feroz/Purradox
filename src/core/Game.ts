@@ -718,7 +718,8 @@ export class Game {
     if (!it || !this.interactables.trigger(propId, by, this.interactHooks(by), this.effects, this.bus)) return;
     const past = this.runner;
     if (this.round !== 2 || past.mode !== "replay") return;
-    if (Math.hypot(past.position.x - it.position.x, past.position.z - it.position.z) > 5.2) return;
+    // trappers stand within 0.9 m of the prop and spring it within 4.6 m of Past You
+    if (Math.hypot(past.position.x - it.position.x, past.position.z - it.position.z) > 5.6) return;
     if (this.fish.owner === past) this.fish.damageGrip(past, by, 1);
     past.flinch(this.tmp.subVectors(past.position, it.position).setY(0), 0.6);
     this.effects.ring(it.position.clone().setY(it.position.y + 0.05), 2.2, 0xf7cf55, 0.5);

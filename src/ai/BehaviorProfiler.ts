@@ -108,7 +108,8 @@ export function deriveTags(fp: BehaviorFingerprint): BehaviorTag[] {
       score: 0.55 + fp.shortcutUsage * 0.6,
     });
   }
-  if (fp.groundRouteBias >= 1 && fp.rooftopRatio < 0.4) {
+  // the splits are the real choices (every route ends on the roofs)
+  if (fp.groundRouteBias >= 1) {
     tags.push({ id: "ground_loyalist", title: "GROUND ROUTE LOYALIST", detail: "YOU TOOK THE STREET AT EVERY SPLIT.", score: 0.85 });
   }
   if (c.hisses >= 3 || (c.hisses >= 2 && fp.hissRate >= 4)) {

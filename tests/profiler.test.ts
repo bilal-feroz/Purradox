@@ -44,6 +44,9 @@ describe("Behavior Profiler", () => {
     expect(loyal.some((t) => t.id === "ground_loyalist")).toBe(true);
     const mixed = deriveTags(fingerprint(summary({ zoneTime: { alley1: 6, lowroofs: 5 }, routeChoice: { awningShortcut: false, rooftopShortcut: true }, elevatedRatio: 0.2 })));
     expect(mixed.some((t) => t.id === "ground_loyalist")).toBe(false);
+    // the final roofs are compulsory, so a high rooftop share doesn't hide it
+    const loyalHigh = deriveTags(fingerprint(summary({ zoneTime: { alley1: 6, alley2: 8 }, elevatedRatio: 0.45 })));
+    expect(loyalHigh.some((t) => t.id === "ground_loyalist")).toBe(true);
   });
 
   it("only calls a route chaotic when the thief actually doubled back", () => {

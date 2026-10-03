@@ -41,6 +41,20 @@ describe("Counterfactual Simulator", () => {
     expect(r.best.assignments.map((a) => a.cat).sort()).toEqual(["fishcat", "mochi"]);
   });
 
+  it("focuses on countering the most distinctive habit", () => {
+    const trickster = fingerprint({
+      ...TelemetryTracker.empty(),
+      runDuration: 30,
+      averageSpeed: 6,
+      interactions: [0, 1, 2].map((i) => ({ t: 5 + i * 5, x: 0, y: 0, z: 0, zone: "court", target: "bottle" })),
+    });
+    const r = simulateCounterfactuals(trace, graph, agents(["mochi", "soot", "beans"]), trickster);
+    for (const c of r.top) expect(c.breakdown.habitFocus).toBe(c.id === "the_bait" ? 0.2 : 0);
+    const neutral = simulateCounterfactuals(trace, graph, agents(["mochi", "soot", "beans"]), null);
+    const rank = (x: typeof r) => x.top.findIndex((c) => c.id === "the_bait");
+    expect(rank(r)).toBeLessThanOrEqual(rank(neutral));
+  });
+
   it("lets the human's fingerprint steer which strategy wins", () => {
     const roofy = fingerprint({ ...TelemetryTracker.empty(), runDuration: 30, elevatedRatio: 0.7, averageSpeed: 7 });
     const ground = fingerprint({ ...TelemetryTracker.empty(), runDuration: 30, elevatedRatio: 0.05, averageSpeed: 5, zoneTime: { alley1: 5, alley2: 5 } });

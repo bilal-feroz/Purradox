@@ -570,8 +570,9 @@ export class RivalBrain {
     }
     if (m.role === "environment_trap") {
       // spring the prop as Past You comes by; trappers don't pounce
+      // spring it as Past You reaches its recorded closest approach, not before
       const pastNear = Math.hypot(q.position.x - m.point.x, q.position.z - m.point.z) < 4.6;
-      if (m.prop && d < 2.6 && pastNear && Math.abs(echoT - m.arriveAt) < 2.5) {
+      if (m.prop && d < 2.6 && pastNear && echoT >= m.arriveAt - 0.35 && echoT - m.arriveAt < 2.0) {
         this.onTrap?.(a, m.prop);
         this.missionDone = true;
       }

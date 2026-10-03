@@ -15,7 +15,7 @@ import { INTERACTABLES, type V3 } from "../data/level";
 import type { NavNode, WaypointGraph } from "../level/WaypointGraph";
 import { zoneAt } from "../level/Zones";
 import type { ReplayData } from "../replay/ReplayTypes";
-import type { BehaviorFingerprint } from "./BehaviorProfiler";
+import { deriveTags, type BehaviorFingerprint, type BehaviorTag } from "./BehaviorProfiler";
 
 export type RoleId = "early_pressure" | "cut_off" | "hold_landing" | "environment_trap" | "late_collapse";
 
@@ -37,6 +37,29 @@ export const COUNTER_NAMES: Record<CounterId, string> = {
   late_collapse: "THE LATE COLLAPSE",
   double_cut: "THE DOUBLE CUT",
 };
+
+/**
+ * Which counter-strategy answers each habit. The council prefers to counter
+ * the human's MOST distinctive habit, as long as that plan also simulates
+ * well (the focus bonus only tips close calls).
+ */
+export const HABIT_COUNTERS: Partial<Record<BehaviorTag["id"], CounterId>> = {
+  fast_rooftop_runner: "rooftop_trap",
+  rooftop_runner: "rooftop_trap",
+  ground_loyalist: "the_choke",
+  shortcut_habit: "double_cut",
+  environment_trickster: "the_bait",
+  // hiss-proof: a trapper never pounces, so there is nothing to hiss at
+  defensive_hisser: "the_bait",
+  full_throttle: "the_rush",
+  risk_taker: "the_rush",
+  cautious_carrier: "late_collapse",
+  // every route converges on the final climb
+  chaotic_router: "late_collapse",
+};
+
+/** Score bonus for the plan that counters the most distinctive habit. */
+const HABIT_FOCUS = 0.2;
 
 /** Where and when the recorded run passes a waypoint. */
 export interface NodePass {
@@ -101,6 +124,8 @@ export interface CandidateBreakdown {
   fishDrop: number;
   diversity: number;
   prior: number;
+  /** Counters the human's most distinctive habit (see HABIT_COUNTERS). */
+  habitFocus: number;
   unfairnessPenalty: number;
   travelImpossibility: number;
   duplicateRolePenalty: number;
@@ -371,6 +396,10 @@ export function simulateCounterfactuals(
     return v;
   };
 
+  // the habit the council most wants to answer
+  const lead = fp ? deriveTags(fp)[0] : undefined;
+  const focusId = lead ? HABIT_COUNTERS[lead.id] : undefined;
+
   let evaluated = 0;
   const bestPer = new Map<CounterId, Candidate>();
   for (const tpl of TEMPLATES) {
@@ -384,7 +413,7 @@ export function simulateCounterfactuals(
       for (;;) {
         const picks = slots.map((_, i) => choices[i][idx[i]]).filter((p): p is NodePass => p !== undefined);
         if (picks.length === slots.length) {
-          const cand = evaluate(tpl, slots, perm, picks, trace, travel, prior);
+          const cand = evaluate(tpl, slots, perm, picks, trace, travel, prior, tpl.id === focusId ? HABIT_FOCUS : 0);
           evaluated++;
           const cur = bestPer.get(tpl.id);
           if (!cur || cand.score > cur.score) bestPer.set(tpl.id, cand);
@@ -415,6 +444,7 @@ function evaluate(
   trace: TraceInfo,
   travel: (a: AgentSpec, n: NavNode, spot?: V3) => { time: number; len: number },
   prior: number,
+  focus: number,
 ): Candidate {
   const assignments: PlannedAssignment[] = [];
   let iq = 0;
@@ -481,6 +511,7 @@ function evaluate(
     fishDrop: (Math.min(viableCount, 2) / 2) * 0.3,
     diversity: (zones / n) * 0.2,
     prior,
+    habitFocus: focus,
     unfairnessPenalty: unfair,
     travelImpossibility: impossible,
     duplicateRolePenalty: duplicate,
@@ -492,7 +523,8 @@ function evaluate(
     0.5 * breakdown.roleSynergy +
     breakdown.fishDrop +
     breakdown.diversity +
-    breakdown.prior -
+    breakdown.prior +
+    breakdown.habitFocus -
     breakdown.unfairnessPenalty -
     breakdown.travelImpossibility -
     breakdown.duplicateRolePenalty;
@@ -530,7 +562,7 @@ function emptyCandidate(): Candidate {
     name: COUNTER_NAMES.the_choke,
     assignments: [],
     score: -Infinity,
-    breakdown: { interceptQuality: 0, coverage: 0, routeAdvantage: 0, roleSynergy: 0, fishDrop: 0, diversity: 0, prior: 0, unfairnessPenalty: 0, travelImpossibility: 0, duplicateRolePenalty: 0 },
+    breakdown: { interceptQuality: 0, coverage: 0, routeAdvantage: 0, roleSynergy: 0, fishDrop: 0, diversity: 0, prior: 0, habitFocus: 0, unfairnessPenalty: 0, travelImpossibility: 0, duplicateRolePenalty: 0 },
     windows: 0,
     earliest: Infinity,
     coverage: 0,

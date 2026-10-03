@@ -8,6 +8,7 @@ import { SPAWN, ZONES, type V3 } from "../data/level";
 import type { WaypointGraph } from "../level/WaypointGraph";
 import type { BehaviorFingerprint, BehaviorTag } from "./BehaviorProfiler";
 import {
+  HABIT_COUNTERS,
   ROLE_NAMES,
   simulateCounterfactuals,
   type AgentSpec,
@@ -116,13 +117,22 @@ function explain(c: Candidate, fp: BehaviorFingerprint | null): { reason: string
     case "the_bait": {
       const trap = c.assignments.find((a) => a.role === "environment_trap" && a.prop);
       const prop = trap?.prop ? PROP_NAMES[trap.prop] ?? trap.prop : "street";
+      // a hisser gets a trap instead of a pounce: there is nothing to hiss at
+      const hisser = fp !== null && fp.counts.interactions < 2 && fp.counts.hisses >= 3;
+      const evidence = hisser
+        ? `You hissed ${fp.counts.hisses} times, so nobody pounces. `
+        : fp && fp.counts.interactions > 0
+          ? `You used ${fp.counts.interactions} distraction${fp.counts.interactions > 1 ? "s" : ""}. `
+          : "";
       return {
-        reason: `${fp && fp.counts.interactions > 0 ? `You used ${fp.counts.interactions} distraction${fp.counts.interactions > 1 ? "s" : ""}. ` : ""}${trap ? `${catName(trap.cat)} owns the ${prop} on your route.` : `${who} sets the props against you.`}`,
-        callout: `THE ${prop.toUpperCase()} IS OURS NOW.`,
+        reason: `${evidence}${trap ? `${catName(trap.cat)} owns the ${prop} on your route.` : `${who} sets the props against you.`}`,
+        callout: hisser ? `YOU CAN'T HISS AT A ${prop.toUpperCase()}.` : `THE ${prop.toUpperCase()} IS OURS NOW.`,
       };
     }
-    case "late_collapse":
-      return { reason: `The council lets you run, then closes in at the ${zoneName(c.assignments.find((a) => a.role === "late_collapse")?.zone ?? lead?.zone ?? "climb")}.`, callout: "YOU'LL NEVER REACH THE ROOF." };
+    case "late_collapse": {
+      const evidence = fp && fp.counts.backtracks >= 3 ? `You doubled back ${fp.counts.backtracks} times, but every route ends on the climb. ` : fp && fp.hesitationTime >= 2 ? `You stood still for ${fp.hesitationTime.toFixed(1)}s. ` : "";
+      return { reason: `${evidence}The council lets you run, then closes in at the ${zoneName(c.assignments.find((a) => a.role === "late_collapse")?.zone ?? lead?.zone ?? "climb")}.`, callout: "YOU'LL NEVER REACH THE ROOF." };
+    }
     case "double_cut":
     default:
       return {
@@ -152,7 +162,8 @@ export function planCouncil(sim: SimResult, fp: BehaviorFingerprint | null, tags
     pressureStyle: earliestProgress < 0.35 ? "early" : earliestProgress < 0.7 ? "mid" : "late",
     allyAssignments: chosen.assignments.map(toAlly),
     interactionPlan: chosen.assignments.filter((a) => a.prop).map((a) => ({ cat: a.cat, prop: a.prop as string, at: a.tPass })),
-    profile: tags[0] ?? null,
+    // show the habit this plan answers (falls back to the most distinctive one)
+    profile: tags.find((t) => HABIT_COUNTERS[t.id] === chosen.id) ?? tags[0] ?? null,
     candidates: sim.top.slice(0, 3).map(summarize),
     evaluated: sim.evaluated,
     ms: sim.ms,

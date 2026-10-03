@@ -61,6 +61,13 @@ describe("Tactical Planner", () => {
     expect(["early", "mid", "late"]).toContain(plan.pressureStyle);
   });
 
+  it("shows the habit the chosen plan answers as the player profile", () => {
+    const shortcuts = fingerprint(summary({ runDuration: 30, elevatedRatio: 0.3, averageSpeed: 6.5, routeChoice: { awningShortcut: true, rooftopShortcut: true } }));
+    const p = planCouncil(simulateCounterfactuals(trace, graph, agents(["mochi", "soot", "beans"]), shortcuts), shortcuts, deriveTags(shortcuts), "double_cut");
+    expect(p.profile?.title).toBe("SHORTCUT ADDICT");
+    expect(p.reason).toContain("2 of 2 shortcuts");
+  });
+
   it("can be forced to explain any simulated strategy", () => {
     const forced = planCouncil(sim, roofy, [], "the_rush");
     expect(forced.strategyId).toBe("the_rush");
