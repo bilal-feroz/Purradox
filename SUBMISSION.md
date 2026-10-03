@@ -28,7 +28,7 @@ Game AI usually only pretends to know you: a rival sees the same scripted level 
 2. **RUN COMPLETE → RUN RECORDED → "But someone else was watching."** The rivals were on the roof the whole time.
 3. **The Alley Council** reads your run and names a counter-strategy, such as **THE ROOFTOP TRAP**.
 4. **Rewind.** The whole street runs backwards in a diorama shot while your recorded route glows and shrinks back to the market.
-5. **Round 2 — Hunt Past You.** Pick Mochi, Soot or Beans. Past You replays your exact run. Use **Scent Memory** to preview the next few seconds of its path, predict its shortcuts, intercept, and pounce its grip away. Watch out: if you pounce while Past You is replaying one of your hisses, **Past You Perfect-Hisses you**. Steal the fish to see **TIMELINE BROKEN**; if Past You reaches the rooftop first, it's **PAST YOU WAS TOO GOOD**.
+5. **Round 2 — Hunt Past You.** Pick Mochi, Soot or Beans. Past You replays your exact run. Use **Scent Memory** to preview the next few seconds of its path, predict its shortcuts, intercept, and pounce its grip away. Watch out: if you pounce while Past You is replaying one of your hisses, **Past You Perfect-Hisses you** (it flashes the same yellow **!** a moment before, so you can hold back). Steal the fish to see **TIMELINE BROKEN**; if Past You reaches the rooftop first, it's **PAST YOU WAS TOO GOOD**.
 
 Core rules: pounce beats bad positioning, hiss beats a predictable pounce, waiting beats a premature hiss.
 

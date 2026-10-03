@@ -11,6 +11,8 @@ import type { TacticalPlan } from "../ai/TacticalFallback";
 import { heuristicPlan } from "../ai/TacticalFallback";
 
 const HUNT_INTRO = 1.2;
+/** Past You flashes its "!" this long before replaying a hiss or pounce. */
+const ECHO_TELL_LEAD = 0.3;
 
 /**
  * Turn the Alley Council's high-level plan into concrete ambush missions on
@@ -62,6 +64,9 @@ export function registerHuntFlow(g: Game): void {
   let t = 0;
   let started = false;
   let outcomeT = 0;
+  // Recorded hisses/pounces Past You is about to replay (for its tells).
+  let tells: Array<{ t: number; kind: "hiss" | "pounce" }> = [];
+  let tellIdx = 0;
 
   g.fsm.register(GameState.HUNT, {
     enter: () => {
@@ -80,6 +85,11 @@ export function registerHuntFlow(g: Game): void {
       g.fishCat.team = 0;
       g.echo.load(replay);
       g.echo.prime();
+      tells = replay.events
+        .filter((e) => e.type === "hiss" || e.type === "pounce")
+        .map((e) => ({ t: e.t, kind: e.type as "hiss" | "pounce" }))
+        .sort((x, y) => x.t - y.t);
+      tellIdx = 0;
       g.echo.setEchoLook(true);
       // Hunter
       for (const id of RIVAL_IDS) g.rivals[id].team = 1;
@@ -193,6 +203,19 @@ export function registerHuntFlow(g: Game): void {
       const dt = g.time.simDt;
       if (dt > 0) {
         g.huntTime += dt;
+        // Telegraph recorded actions just before Past You replays them, the
+        // same "!" language the rivals use in Round 1.
+        while (tellIdx < tells.length && tells[tellIdx].t - g.echo.time <= ECHO_TELL_LEAD) {
+          const tell = tells[tellIdx++];
+          const p = g.fishCat.position;
+          if (tell.t < g.echo.time || p.distanceTo(hunter.position) > 9) continue;
+          if (tell.kind === "pounce") {
+            g.bus.emit("pounceTell", { cat: "fishcat", x: p.x, y: p.y, z: p.z });
+          } else {
+            g.effects.exclaim(p);
+            g.audio.play("tell", { at: p, volume: 0.35 });
+          }
+        }
         g.simulate(dt, 2);
         g.history.tick(g.huntTime);
         if (g.fish.owner === hunter) {
