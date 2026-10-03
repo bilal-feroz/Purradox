@@ -74,6 +74,13 @@ export class CatAnimator {
   private earTwitch = 0;
   private earTwitchSide = 1;
   private earTwitchTimer = 3 + Math.random() * 4;
+
+  /** A sound off to one side (1 = the cat's left): flick that ear toward it. */
+  flickEar(side: 1 | -1): void {
+    this.earTwitch = 1;
+    this.earTwitchSide = side;
+    this.earTwitchTimer = Math.max(this.earTwitchTimer, 1.2);
+  }
   private sitBlend = 0;
   private wasGrounded = true;
   private gaitW = { walk: 1, trot: 0, gallop: 0 };

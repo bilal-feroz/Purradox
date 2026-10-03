@@ -110,6 +110,9 @@ export class FishSystem {
   private bounces = 0;
   private looseTime = 0;
   private flopTimer = 0;
+  /** Carried-fish flop bursts: seconds until the next one, and time left in the current one. */
+  private carryFlopWait = 2;
+  private carryFlop = 0;
   private sparkleTimer = 0;
   /** Round 2: only this cat may take the fish off the table. */
   reservedFor: CatActor | null = null;
@@ -347,8 +350,16 @@ export class FishSystem {
       }
       case "carried": {
         if (this.owner) {
-          // gentle wiggle in the mouth
-          this.model.rotation.z = 0.12 + Math.sin(time * 9) * 0.06;
+          // gentle wiggle in the mouth, and every few seconds a proper flop
+          this.carryFlopWait -= dt;
+          if (this.carryFlopWait <= 0) {
+            this.carryFlopWait = 1.8 + Math.random() * 2.6;
+            this.carryFlop = 0.42;
+          }
+          this.carryFlop = Math.max(0, this.carryFlop - dt);
+          const flop = this.carryFlop > 0 ? Math.sin((this.carryFlop / 0.42) * Math.PI) : 0;
+          this.model.rotation.z = 0.12 + Math.sin(time * 9) * 0.06 + Math.sin(time * 23) * 0.22 * flop;
+          this.model.rotation.y = Math.PI + Math.sin(time * 31) * 0.38 * flop;
           this.model.getWorldPosition(this.position);
         }
         break;

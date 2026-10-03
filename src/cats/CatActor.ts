@@ -176,9 +176,10 @@ export class CatActor {
     this.forcedActionT = 0;
   }
 
-  meow(): void {
-    this.meowT = 0.45;
-    this.bus.emit("meow", { cat: this.id });
+  /** A meow (or, `aggressive`, the yowl a rival lets out when it spots you). */
+  meow(aggressive = false): void {
+    this.meowT = aggressive ? 0.7 : 0.45;
+    this.bus.emit("meow", aggressive ? { cat: this.id, aggressive } : { cat: this.id });
   }
 
   teleport(p: THREE.Vector3, yaw: number): void {

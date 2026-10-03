@@ -36,6 +36,7 @@ import { ReplayRecorder } from "../replay/ReplayRecorder";
 import { emptySample, type ReplayData, type ReplaySnapshot } from "../replay/ReplayTypes";
 import { WorldHistory, type Rewindable } from "../replay/WorldHistory";
 import { CatSelect } from "../ui/CatSelect";
+import { ComicPops } from "../ui/ComicPops";
 import { CouncilMap } from "../ui/CouncilMap";
 import { HUD } from "../ui/HUD";
 import { PauseMenu } from "../ui/PauseMenu";
@@ -47,6 +48,7 @@ import { EventBus } from "./EventBus";
 import { GameState, StateMachine } from "./GameState";
 import { Input } from "./Input";
 import { GameTime } from "./Time";
+import { damp } from "./math";
 import { registerRunFlow } from "../flow/RunFlow";
 import { registerTransitionFlow } from "../flow/TransitionFlow";
 import { registerHuntFlow } from "../flow/HuntFlow";
@@ -130,6 +132,12 @@ export class Game {
   readonly results: Results;
   readonly stamps: Stamps;
   readonly councilMap: CouncilMap;
+  /** "MRRP!" / "HSSS!" / "MRAOW!" over the cats. */
+  readonly pops: ComicPops;
+  /** Smoothed 0..1 music pressure (rivals closing in, the final climb). */
+  private musicPressure = 0;
+  /** Set to skip the Round 1 opening sweep (tests / automation). */
+  skipOpening = false;
   readonly pause: PauseMenu;
   readonly fadeEl: HTMLDivElement;
   readonly temporalVignette: HTMLDivElement;
@@ -208,6 +216,7 @@ export class Game {
     this.results = new Results(uiRoot);
     this.stamps = new Stamps(uiRoot);
     this.councilMap = new CouncilMap(uiRoot);
+    this.pops = new ComicPops(uiRoot);
     this.pause = new PauseMenu(uiRoot);
     this.temporalVignette = document.createElement("div");
     this.temporalVignette.className = "vignette-temporal";
@@ -399,6 +408,15 @@ export class Game {
       const me = this.controlled;
       if (me && me.team !== cat.team && me.abilities.hissReady && me.position.distanceTo(cat.position) < 8) this.hud.cue("hiss");
     });
+    // comic words over the cats (occasional: rate limited, capped, culled)
+    const popAt = (id: CatId) => () => (this.actors[id].rig.root.visible ? this.actors[id].position : null);
+    const popsOn = () => !this.paused && this.fsm.is(GameState.INTRO, GameState.FISH_RUN, GameState.HUNT);
+    this.bus.on("meow", (e) => {
+      if (popsOn()) this.pops.pop(e.aggressive ? "MRAOW!" : "MRRP!", popAt(e.cat), e.aggressive ? "notice" : "meow", `meow:${e.cat}`, e.aggressive ? 1 : 3.5);
+    });
+    this.bus.on("hissStart", (e) => {
+      if (popsOn()) this.pops.pop("HSSS!", popAt(e.cat), "hiss", `hiss:${e.cat}`, 2.5);
+    });
     this.bus.on("hissStart", (e) => {
       if (e.cat === this.runnerId && isRunRecording()) {
         this.recorder.event(this.runTime, "hiss", { dirX: e.dirX, dirZ: e.dirZ }, snap);
@@ -476,6 +494,15 @@ export class Game {
     // AI hearing: every game-driven cat within earshot decides how to react
     this.bus.on("sound", (e) => {
       for (const c of this.cats) if (c.mode === "ai") this.brains[c.id].hear(e);
+      // every cat in earshot flicks the ear on that side
+      for (const c of this.cats) {
+        if (!c.active) continue;
+        const dx = e.x - c.position.x;
+        const dz = e.z - c.position.z;
+        const d = Math.hypot(dx, dz);
+        if (d > e.radius || d < 0.3) continue;
+        c.animator.flickEar(dx * Math.cos(c.yaw) - dz * Math.sin(c.yaw) > 0 ? 1 : -1);
+      }
     });
     this.bus.on("respawn", (e) => {
       if (e.cat === this.runnerId && isRunRecording()) this.recorder.cut(this.runTime, snap);
@@ -726,6 +753,33 @@ export class Game {
     this.alert("COUNCIL TRAP!", "info");
   }
 
+  /**
+   * Round 1: rivals actively closing in, the rooftops and the final climb
+   * push the music. Round 2: closing in on Past You and its final climb do.
+   */
+  private updateMusicPressure(dt: number, round: 1 | 2): void {
+    const me = this.controlled;
+    let p = 0;
+    if (me) {
+      if (round === 1) {
+        for (const c of this.others()) {
+          if (c.mode !== "ai") continue;
+          const st = this.brains[c.id].state;
+          if (st !== "NOTICE" && st !== "CHASE" && st !== "INTERCEPT" && st !== "POUNCE" && st !== "FISH_CHASE") continue;
+          p = Math.max(p, 1 - c.position.distanceTo(me.position) / 12);
+        }
+      } else {
+        p = Math.max(p, 1 - this.runner.position.distanceTo(me.position) / 14);
+      }
+      const lead = round === 1 ? me : this.runner;
+      const z = zoneAt(lead.position.x, lead.position.y, lead.position.z)?.id;
+      if (z === "climb" || z === "safe") p = Math.max(p, 0.8);
+      else if (z === "laundry" || z === "lowroofs") p = Math.max(p, 0.4);
+    }
+    this.musicPressure = damp(this.musicPressure, p, p > this.musicPressure ? 3 : 0.7, dt);
+    this.audio.setMusicPressure(this.musicPressure);
+  }
+
   /** Player pressed E. */
   tryInteract(cat: CatActor): boolean {
     const it = this.interactables.nearest(cat);
@@ -759,6 +813,7 @@ export class Game {
     this.combat.update();
     this.fish.update(dt, this.cats, this.time.simTime);
     if (round === 1) this.updateGripRecovery(dt);
+    this.updateMusicPressure(dt, round);
     this.interactables.update(dt, this.time.simTime);
     this.pigeons.update(dt, this.cats);
     // in-world cue: props you could use twinkle as you approach
@@ -972,6 +1027,7 @@ export class Game {
     this.lighting.update(this.time.realDt);
     this.audio.setListener(this.camera.camera.position);
     this.audio.update(this.time.realDt, !this.fsm.is(GameState.BOOT));
+    this.pops.update(this.time.realDt, this.photoCamera ?? this.camera.camera);
     this.debug?.update();
     this.aiDebug?.update(this.time.realDt);
     this.updateTracker();

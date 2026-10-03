@@ -30,7 +30,8 @@ export type SoundName =
   | "scent"
   | "whoosh"
   | "tell"
-  | "bell";
+  | "bell"
+  | "yowl";
 
 interface PlayOpts {
   at?: THREE.Vector3 | { x: number; y: number; z: number };
@@ -129,6 +130,11 @@ export class AudioManager {
     this.music?.duck(seconds);
   }
 
+  /** 0..1: how hard the moment is (rivals closing in, the final climb). */
+  setMusicPressure(v: number): void {
+    this.music?.setPressure(v);
+  }
+
   update(dt: number, ambientOn: boolean): void {
     if (!this.ready) return;
     if (ambientOn && !this.ambience) this.ambience = this.startAmbience();
@@ -169,7 +175,7 @@ export class AudioManager {
     bus.on("pounceHit", (e) => this.play("hit", { at: e, volume: e.gripDamage ? 0.7 : 0.55 }));
     bus.on("hissStart", (e) => this.play("hiss", { at: e, volume: 0.5, cat: e.cat }));
     bus.on("perfectHiss", (e) => this.play("perfect", { at: e, volume: 0.7 }));
-    bus.on("meow", (e) => this.play("meow", { volume: 0.45, cat: e.cat }));
+    bus.on("meow", (e) => this.play(e.aggressive ? "yowl" : "meow", { volume: e.aggressive ? 0.38 : 0.45, cat: e.cat }));
     bus.on("fishPickup", (e) => this.play(e.recovered ? "recovered" : e.stolen ? "stolen" : "pickup", { at: e, volume: 0.5 }));
     bus.on("fishDrop", (e) => this.play("drop", { at: e, volume: 0.55 }));
     bus.on("pigeonsBurst", (e) => this.play("pigeons", { at: e, volume: Math.min(0.7, 0.25 + e.count * 0.04) }));
@@ -231,6 +237,9 @@ export class AudioManager {
         break;
       case "meow":
         this.meowSound(out, now, MEOW_PITCH[opts.cat ?? "fishcat"]);
+        break;
+      case "yowl":
+        this.yowlSound(out, now, MEOW_PITCH[opts.cat ?? "fishcat"]);
         break;
       case "pickup":
         [1047, 1319, 1568].forEach((f, i) => this.tone(out, now + i * 0.055, "triangle", f, 0.18, 0.4));
@@ -409,6 +418,43 @@ export class AudioManager {
     g.connect(out);
     s.start(t, Math.random());
     s.stop(t + 0.55);
+  }
+
+  /** The rival's "MRAOW!": lower, longer, wavering, with a growl underneath. */
+  private yowlSound(out: AudioNode, t: number, pitch: number): void {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    const base = 330 * pitch;
+    o.frequency.setValueAtTime(base * 0.8, t);
+    o.frequency.linearRampToValueAtTime(base * 1.45, t + 0.22);
+    o.frequency.linearRampToValueAtTime(base * 1.2, t + 0.5);
+    o.frequency.linearRampToValueAtTime(base * 0.7, t + 0.78);
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 9;
+    const vibGain = ctx.createGain();
+    vibGain.gain.value = base * 0.05;
+    vib.connect(vibGain);
+    vibGain.connect(o.frequency);
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.Q.value = 4;
+    f.frequency.setValueAtTime(600, t);
+    f.frequency.linearRampToValueAtTime(1300, t + 0.25);
+    f.frequency.linearRampToValueAtTime(650, t + 0.75);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.8, t + 0.08);
+    g.gain.setValueAtTime(0.7, t + 0.55);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.82);
+    o.connect(f);
+    f.connect(g);
+    g.connect(out);
+    o.start(t);
+    vib.start(t);
+    o.stop(t + 0.86);
+    vib.stop(t + 0.86);
+    this.noiseBurst(out, t + 0.04, 0.6, "lowpass", 380, 1.2, 0.35);
   }
 
   private meowSound(out: AudioNode, t: number, pitch: number): void {

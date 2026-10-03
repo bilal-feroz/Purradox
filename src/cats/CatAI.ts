@@ -151,6 +151,8 @@ export class RivalBrain {
   onWantInteract: ((cat: CatActor) => void) | null = null;
   /** Round 2: this ally finished its intercept; the coordinator re-plans. */
   onMissionEnded: ((brain: RivalBrain) => void) | null = null;
+  private time = 0;
+  private lastYowl = -Infinity;
   /** Round 2: spring an environment trap on Past You. */
   onTrap: ((cat: CatActor, prop: string) => void) | null = null;
 
@@ -219,6 +221,11 @@ export class RivalBrain {
 
   private go(s: AIState): void {
     if (this.state === s) return;
+    // spotting the thief: a yowl (rate limited, purely cosmetic)
+    if (s === "NOTICE" && this.time - this.lastYowl > 9) {
+      this.lastYowl = this.time;
+      this.actor.meow(true);
+    }
     this.state = s;
     this.stateT = 0;
     this.path = [];
@@ -228,6 +235,7 @@ export class RivalBrain {
 
   // ------------------------------------------------------------------ update
   update(dt: number, w: AIWorld): void {
+    this.time += dt;
     const a = this.actor;
     a.intent.moveX = 0;
     a.intent.moveZ = 0;

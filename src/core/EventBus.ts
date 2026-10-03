@@ -28,7 +28,7 @@ export interface GameEvents {
   pigeonsBurst: { x: number; y: number; z: number; count: number };
   zoneEnter: { cat: CatId; zone: string; index: number };
   alert: { text: string; kind: "stolen" | "dropped" | "recovered" | "perfect" | "info" };
-  meow: { cat: CatId };
+  meow: { cat: CatId; aggressive?: boolean };
   scentMemory: { duration: number };
   respawn: { cat: CatId };
 }

@@ -1,9 +1,14 @@
 // Procedural soundtrack. Round 1: playful, fast mandolin-pluck theme over
-// light percussion. Round 2: the same motif reversed, an octave lower,
-// through a tape-wobble delay — "the same tune, from the other side of time".
+// light percussion that tightens when rivals close in or the final climb
+// starts. Round 2: the same motif reversed, an octave lower, bent into the
+// minor, with ticking percussion through a tape-wobble delay — "same place,
+// second chance, wrong timeline".
 
 const R1_MELODY = [74, 78, 81, 83, 81, 78, 76, 0, 74, 76, 78, 79, 81, 0, 79, 78, 76, 79, 83, 81, 79, 76, 74, 0, 72, 74, 76, 78, 76, 74, 72, 0];
 const R1_BASS = [50, 50, 57, 57, 55, 55, 50, 50, 52, 52, 55, 55, 48, 48, 50, 50];
+/** Round 2 bends the harmony: F# → F and B → Bb in the tune, E → F in the bass. */
+const r2Note = (n: number) => (n === 78 ? 77 : n === 83 ? 82 : n);
+const R2_BASS = R1_BASS.map((n) => (n === 52 ? 53 : n));
 
 function midi(n: number): number {
   return 440 * Math.pow(2, (n - 69) / 12);
@@ -23,6 +28,7 @@ export class Music {
   private readonly wobble: OscillatorNode;
   private readonly wobbleGain: GainNode;
   private intensity = 1;
+  private pressure = 0;
 
   constructor(
     private readonly ctx: AudioContext,
@@ -54,6 +60,7 @@ export class Music {
   setMode(mode: MusicMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
+    this.pressure = 0;
     const t = this.ctx.currentTime;
     this.out.gain.cancelScheduledValues(t);
     this.out.gain.setTargetAtTime(mode === "off" ? 0 : mode === "menu" ? 0.5 : 0.85, t, 0.4);
@@ -74,6 +81,11 @@ export class Music {
   /** 0..1 — thins the arrangement during tense beats. */
   setIntensity(v: number): void {
     this.intensity = v;
+  }
+
+  /** 0..1 — rivals closing in / the final climb: extra percussion, then a doubled tune. */
+  setPressure(v: number): void {
+    this.pressure = Math.max(0, Math.min(1, v));
   }
 
   duck(seconds: number): void {
@@ -101,12 +113,15 @@ export class Music {
   private playStep(step: number, t: number, eighth: number): void {
     const r2 = this.mode === "round2";
     const menu = this.mode === "menu";
-    const melody = r2 ? R1_MELODY[31 - step] : R1_MELODY[step];
+    const melody = r2 ? r2Note(R1_MELODY[31 - step]) : R1_MELODY[step];
     if (melody > 0 && (step % 2 === 0 || this.intensity > 0.5 || menu)) {
       this.pluck(midi(melody - (r2 ? 12 : 0)), t, eighth * (r2 ? 1.8 : 0.9), r2 ? 0.1 : 0.13, r2);
     }
+    const p = menu ? 0 : this.pressure;
+    // high pressure: the tune doubles an octave up
+    if (melody > 0 && p > 0.7 && step % 2 === 0) this.pluck(midi(melody + (r2 ? 0 : 12)), t, eighth * 0.6, 0.045, r2);
     if (step % 2 === 0) {
-      const b = R1_BASS[(step / 2) % 16];
+      const b = (r2 ? R2_BASS : R1_BASS)[(step / 2) % 16];
       if (!r2 || step % 4 === 0) this.bass(midi(b - 12), t, eighth * (r2 ? 3.6 : 1.8));
     }
     if (menu) {
@@ -117,8 +132,15 @@ export class Music {
     if (!r2) {
       if (step % 8 === 4) this.clap(t);
       this.shaker(t, step % 2 === 1 ? 0.06 : 0.03);
-    } else if (step % 8 === 6) {
-      this.reverseSwell(t, eighth * 2);
+      if (p > 0.35) {
+        // pressure: sixteenth shakers and a pushed kick
+        this.shaker(t + eighth / 2, 0.02 + p * 0.03);
+        if (step % 8 === 6) this.kick(t, 0.22 + p * 0.15);
+      }
+    } else {
+      if (step % 8 === 6) this.reverseSwell(t, eighth * 2);
+      // a clock ticking somewhere in the wrong timeline, louder as you close in
+      if (step % 2 === 1) this.noiseHit(t, 0.02 + p * 0.04, 0.03, "highpass", 8500);
     }
   }
 
