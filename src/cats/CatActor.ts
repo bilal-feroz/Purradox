@@ -40,6 +40,11 @@ export class CatActor {
   wantHiss = false;
   readonly pounceAim = new THREE.Vector3(0, 0, 1);
   readonly hissAim = new THREE.Vector3(0, 0, 1);
+  /**
+   * Extra windup on this AI cat's next pounce. Round 1 sets it so each
+   * rival's first lunge is a slow, readable introduction to the "!" tell.
+   */
+  windupBonus = 0;
 
   staggerT = 0;
   hesitateT = 0;
@@ -163,6 +168,7 @@ export class CatActor {
   }
 
   resetStatus(): void {
+    this.windupBonus = 0;
     this.staggerT = 0;
     this.hesitateT = 0;
     this.invulnT = 0;
@@ -198,7 +204,8 @@ export class CatActor {
 
     // Requests → abilities
     if (this.wantPounce && this.canAct && !ab.busy) {
-      ab.windupTime = this.mode === "ai" ? AI_POUNCE_WINDUP : POUNCE_WINDUP;
+      ab.windupTime = this.mode === "ai" ? AI_POUNCE_WINDUP + this.windupBonus : POUNCE_WINDUP;
+      this.windupBonus = 0;
       if (ab.tryPounce(this.pounceAim) && this.mode === "ai") {
         this.bus.emit("pounceTell", { cat: this.id, x: this.position.x, y: this.position.y, z: this.position.z });
       }

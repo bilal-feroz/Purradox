@@ -509,6 +509,11 @@ export class Effects {
       r.life = r.max;
       r.mesh.visible = false;
     }
+    for (const e of this.exclaims) {
+      e.life = e.max;
+      e.follow = null;
+      e.sprite.visible = false;
+    }
   }
 
   /** Reverse every live particle's motion (used when the rewind starts). */

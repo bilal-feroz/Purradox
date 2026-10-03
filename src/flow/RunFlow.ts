@@ -6,6 +6,8 @@ import { GameState } from "../core/GameState";
 import { zoneAt } from "../level/Zones";
 
 const MENU_CAT = new THREE.Vector3(-18.6, 0, 13.4);
+/** Extra windup (s) on each rival's first pounce of Round 1. */
+const FIRST_POUNCE_BONUS = 0.3;
 const WATCH_SPOTS: Array<[number, number, number]> = [
   [50.6, 5.9, -61.2],
   [52.6, 5.9, -62.2],
@@ -73,6 +75,8 @@ export function registerRunFlow(g: Game): void {
       g.results.show(null);
       g.resetWorld();
       g.round = 1;
+      // Each rival's first lunge is slower: an easy first "!" to hiss at.
+      for (const id of RIVAL_IDS) g.rivals[id].windupBonus = FIRST_POUNCE_BONUS;
       g.controlled = g.fishCat;
       g.fishCat.mode = "player";
       g.hud.setRound(1);

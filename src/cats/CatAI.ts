@@ -333,7 +333,8 @@ export class RivalBrain {
     if (q.staggerT > 0.1) return false;
     // Judge range by where the quarry will be when the windup ends: ambushers
     // lunge early at an approaching cat, chasers don't whiff at a fleeing one.
-    w.predict(AI_POUNCE_WINDUP, _p);
+    const windup = AI_POUNCE_WINDUP + a.windupBonus;
+    w.predict(windup, _p);
     const reach = Math.hypot(_p.x - a.position.x, _p.z - a.position.z);
     if (reach > this.p.pounceRange) return false;
     _knee.copy(a.position).setY(a.position.y + 0.45);
@@ -342,7 +343,7 @@ export class RivalBrain {
     this.pounceTimer = this.p.pounceCooldown * (w.round === 2 ? 0.8 : 1) + this.rng.range(-0.3, 0.4);
     if (!this.rng.chance(this.p.pounceChance)) return false;
     const travel = reach / Math.max(1, a.stats.pounceSpeed);
-    w.predict(travel + AI_POUNCE_WINDUP, _p);
+    w.predict(travel + windup, _p);
     a.pounceAim.subVectors(_p, a.position).setY(0);
     if (a.pounceAim.lengthSq() < 1e-4) a.pounceAim.copy(a.forward());
     a.pounceAim.normalize();
