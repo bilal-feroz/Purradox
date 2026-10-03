@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { RIVAL_IDS } from "../data/cats";
+import { CATS } from "../data/cats";
 import { PALETTE } from "../data/palette";
 import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
@@ -43,14 +43,14 @@ export function registerTransitionFlow(g: Game): void {
       g.stamps.show("THE ALLEY COUNCIL", "council", true);
       g.stamps.show("IS PLOTTING…", "council", true);
       g.audio.play("stamp", { volume: 0.45 });
-      // huddle: the three rivals gather in a little circle and plot
+      // huddle: the three other cats gather in a little circle and plot
+      const council = g.others();
       const center = new THREE.Vector3();
-      for (const id of RIVAL_IDS) center.add(g.rivals[id].position);
-      center.divideScalar(3);
-      RIVAL_IDS.forEach((id, i) => {
-        const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
+      for (const c of council) center.add(c.position);
+      center.divideScalar(council.length);
+      council.forEach((r, i) => {
+        const a = (i / council.length) * Math.PI * 2 + Math.PI / 2;
         const p = new THREE.Vector3(center.x + Math.cos(a) * 0.8, center.y, center.z + Math.sin(a) * 0.8);
-        const r = g.rivals[id];
         r.teleport(p, Math.atan2(center.x - p.x, center.z - p.z));
         r.setForcedAction("sit");
         r.lookTarget = center.clone().setY(center.y + 0.45);
@@ -59,8 +59,7 @@ export function registerTransitionFlow(g: Game): void {
     },
     update: (dt) => {
       t += dt;
-      for (const id of RIVAL_IDS) {
-        const r = g.rivals[id];
+      for (const r of g.others()) {
         if (t > 0.5 && Math.random() < dt * 0.8) r.meow();
         r.updateScripted(dt);
       }
@@ -79,7 +78,7 @@ export function registerTransitionFlow(g: Game): void {
     },
     exit: () => {
       g.stamps.clear();
-      for (const id of RIVAL_IDS) g.rivals[id].lookTarget = null;
+      for (const c of g.others()) c.lookTarget = null;
     },
   });
 
@@ -109,7 +108,7 @@ export function registerTransitionFlow(g: Game): void {
         c.setForcedAction(null);
         c.abilities.cancelAll();
       }
-      // Fish Cat's recorded trajectory as a glowing sea-glass streak
+      // The thief's recorded trajectory as a glowing sea-glass streak
       streak?.removeFromParent();
       streak = null;
       if (g.replay && g.replay.snapshots.length > 4) {
@@ -157,12 +156,12 @@ export function registerTransitionFlow(g: Game): void {
         streak.geometry.setDrawRange(0, n);
         (streak.material as THREE.MeshBasicMaterial).opacity = 0.85 * Math.min(1, (1 - u) * 4);
       }
-      const fc = g.fishCat.position;
+      const fc = g.runner.position;
       moteTimer -= dt;
       if (moteTimer <= 0) {
         moteTimer = 0.03;
         g.effects.reverseMotes(fc, 3, 2.4);
-        for (const id of RIVAL_IDS) g.effects.reverseMotes(g.rivals[id].position, 1, 1.4);
+        for (const c of g.others()) g.effects.reverseMotes(c.position, 1, 1.4);
       }
       g.effects.sparkle(fc.clone().setY(fc.y + 0.4), 2, 0x7ff3dc, 1.6, 0.6);
       if (head) {
@@ -203,25 +202,33 @@ export function registerTransitionFlow(g: Game): void {
       g.audio.setMusic("menu");
       g.temporalVignette.classList.add("show");
       g.renderer.temporalUniforms.uEdge.value = 0.25;
-      RIVAL_IDS.forEach((id, i) => {
-        const r = g.rivals[id];
+      const hunters = g.others();
+      hunters.forEach((r, i) => {
         const s = SELECT_SPOTS[i];
         r.mode = "scripted";
         r.teleport(new THREE.Vector3(s[0], s[1], s[2]), 0);
         r.setForcedAction("sit");
+        r.lookTarget = SELECT_CAM;
       });
       // Past You waits at the start, already sea-glass tinted
-      g.fishCat.mode = "scripted";
+      g.runner.mode = "scripted";
+      g.echo.bind(g.runner);
       g.echo.setEchoLook(true);
       g.camera.setCinematic(SELECT_CAM, SELECT_LOOK, 3, true);
-      for (const id of RIVAL_IDS) g.rivals[id].lookTarget = SELECT_CAM;
-      g.select.show(true, g.replay?.duration ?? 0);
+      const runT = g.replay?.duration ?? 0;
+      g.select.show(true, {
+        ids: hunters.map((c) => c.id),
+        title: "WHO WANTS THE FISH?",
+        sub: "ROUND 2 — CHOOSE WHO HUNTS PAST YOU",
+        recap: `Past You (${CATS[g.runnerId].name}) will replay your exact ${formatClock(runT)} run — every jump, pounce and hiss.`,
+        focus: 1,
+        card: (id) => ({ name: CATS[id].title, role: CATS[id].role.toUpperCase(), blurb: CATS[id].blurb }),
+      });
       g.debug?.log(`replay: ${g.replay?.snapshots.length} snapshots, ${g.replay?.events.length} events, ${formatClock(g.replay?.duration ?? 0)}`);
     },
     update: (dt) => {
       t += dt;
-      for (const id of RIVAL_IDS) g.rivals[id].updateScripted(dt);
-      g.fishCat.updateScripted(dt);
+      for (const c of g.cats) c.updateScripted(dt);
       g.pigeons.update(dt, []);
       g.fish.update(dt, [], g.time.realTime);
       g.camera.setCinematic(new THREE.Vector3(SELECT_CAM.x + Math.sin(t * 0.3) * 0.25, SELECT_CAM.y, SELECT_CAM.z), SELECT_LOOK, 2);
@@ -229,9 +236,9 @@ export function registerTransitionFlow(g: Game): void {
     },
     exit: () => {
       g.select.show(false);
-      for (const id of RIVAL_IDS) {
-        g.rivals[id].setForcedAction(null);
-        g.rivals[id].lookTarget = null;
+      for (const c of g.others()) {
+        c.setForcedAction(null);
+        c.lookTarget = null;
       }
     },
   });

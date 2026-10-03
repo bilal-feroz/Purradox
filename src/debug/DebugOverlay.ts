@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { RIVAL_IDS } from "../data/cats";
 import { ZONES } from "../data/level";
 import type { Game } from "../core/Game";
 import { zoneAt } from "../level/Zones";
@@ -107,7 +106,7 @@ export class DebugOverlay {
     }
     this.echoMarker.visible = g.round === 2;
     this.echoMarker.position.copy(g.echo.authoritative).setY(g.echo.authoritative.y + 1.1);
-    const c = g.controlled ?? g.fishCat;
+    const c = g.controlled ?? g.runner;
     const z = zoneAt(c.position.x, c.position.y, c.position.z);
     const info = g.renderer.info();
     const lines = [
@@ -117,7 +116,7 @@ export class DebugOverlay {
       `vel ${Math.hypot(c.velocity.x, c.velocity.z).toFixed(2)}  action ${c.action}  fish ${g.fish.state}${g.fish.owner ? ":" + g.fish.owner.id : ""} grip ${g.fish.grip.value}`,
       `run ${g.runTime.toFixed(2)}s  rec ${g.recorder.snapshotCount} snaps / ${g.recorder.eventCount} events  history ${g.history.frameCount}`,
       g.round === 2 ? `echo t ${g.echo.time.toFixed(2)} / ${g.echo.duration.toFixed(2)}  finished ${g.echo.finished}` : "",
-      RIVAL_IDS.map((id) => `${id}:${g.brains[id].state}`).join("  "),
+      g.others().map((o) => `${o.id}:${o.mode === "ai" ? g.brains[o.id].state : o.mode}`).join("  "),
       `listeners ${g.bus.listenerCount()}  resets ${g.resets.resetCount}`,
       ...this.logs,
     ];

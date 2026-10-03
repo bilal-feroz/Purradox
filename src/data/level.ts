@@ -5,7 +5,7 @@
 // Shortcut A (awnings) links 2→4, Shortcut B (low roofs) links 4→6.
 // Scale: 1 cat body length = 1 world unit. +X east, -Z north.
 
-import type { RivalId } from "./cats";
+import type { CatId } from "./cats";
 
 export type V3 = [number, number, number];
 
@@ -58,22 +58,26 @@ export const ZONE_NAMES: Record<number, string> = {
 };
 
 export const SPAWN = {
-  fishCat: { pos: [-31, 0, 16] as V3, yaw: Math.PI / 2 },
+  /** Round 1 start for whichever cat is the thief. */
+  runner: { pos: [-31, 0, 16] as V3, yaw: Math.PI / 2 },
   heroFish: [-21.95, 0.92, 15.6] as V3,
   heroTable: [-21.3, 0, 15.6] as V3,
   goal: [57, H.safe, -76.5] as V3,
   goalRadius: 2.6,
-  rivals: {
+  /** Round 1 posts for AI-controlled cats, flavored by archetype. */
+  ai: {
+    fishcat: { pos: [15, 2.2, -12.4] as V3, yaw: 0.3 },
     mochi: { pos: [-7.5, 0, 9.6] as V3, yaw: -Math.PI * 0.75 },
     soot: { pos: [3, 2.2, -33] as V3, yaw: Math.PI * 0.9 },
     beans: { pos: [27, 5.0, -57] as V3, yaw: Math.PI * 0.6 },
-  } as Record<RivalId, { pos: V3; yaw: number }>,
+  } as Record<CatId, { pos: V3; yaw: number }>,
   /** Round 2 hunter start regions (blueprint section E). */
   hunters: {
+    fishcat: { pos: [15, 2.2, -12.4] as V3, yaw: 0.3 },
     mochi: { pos: [7, 1.0, 13] as V3, yaw: -Math.PI / 2 },
     soot: { pos: [13, 2.2, -31] as V3, yaw: Math.PI },
     beans: { pos: [40, 5.0, -50] as V3, yaw: -Math.PI / 2 },
-  } as Record<RivalId, { pos: V3; yaw: number }>,
+  } as Record<CatId, { pos: V3; yaw: number }>,
 };
 
 export const INTERACTABLES = {
@@ -86,8 +90,8 @@ export const INTERACTABLES = {
 
 export const FOUNTAIN = { center: [15, 2.2, -21] as V3, radius: 3.3 };
 
-/** Round 1 ambush spots for Soot (in route order). */
-export const SOOT_AMBUSH: V3[] = [
+/** Round 1 ambush spots for the ambusher archetype (in route order). */
+export const AMBUSH_SPOTS: V3[] = [
   [2.5, 2.2, -33.5],
   [1.5, 3.6, -50],
   [21, 5.0, -47],

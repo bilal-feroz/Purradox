@@ -45,3 +45,28 @@ function save(r: Records): void {
 function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
 }
+
+const PROGRESS_KEY = "purradox.progress.v1";
+
+export interface Progress {
+  /** Set after the first full Round 1 + Round 2 cycle (unlocks Choose Your Thief). */
+  thiefUnlocked: boolean;
+}
+
+export function loadProgress(): Progress {
+  try {
+    const raw = localStorage.getItem(PROGRESS_KEY);
+    if (raw) return { thiefUnlocked: Boolean((JSON.parse(raw) as Partial<Progress>).thiefUnlocked) };
+  } catch {
+    // storage unavailable: behave like a first playthrough
+  }
+  return { thiefUnlocked: false };
+}
+
+export function markCycleComplete(): void {
+  try {
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify({ thiefUnlocked: true } satisfies Progress));
+  } catch {
+    // ignore
+  }
+}

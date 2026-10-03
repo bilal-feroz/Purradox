@@ -51,6 +51,20 @@ describe("Game state machine", () => {
     expect(fsm.state).toBe(GameState.INTRO);
   });
 
+  it("offers Choose Your Thief from the menu and after results, never mid-round", () => {
+    const fsm = new StateMachine();
+    fsm.transition(GameState.MENU);
+    fsm.transition(GameState.THIEF_SELECTION);
+    expect(() => fsm.transition(GameState.HUNT)).toThrow();
+    fsm.transition(GameState.INTRO);
+    fsm.transition(GameState.FISH_RUN);
+    expect(() => fsm.transition(GameState.THIEF_SELECTION)).toThrow();
+    for (const st of [GameState.FISH_RUN_COMPLETE, GameState.ANALYZE_RUN, GameState.REWIND, GameState.CAT_SELECTION, GameState.HUNT, GameState.HUNT_COMPLETE, GameState.RESULTS]) fsm.transition(st);
+    fsm.transition(GameState.THIEF_SELECTION); // NEW RUN after the first cycle
+    fsm.transition(GameState.MENU); // back
+    expect(fsm.state).toBe(GameState.MENU);
+  });
+
   it("rejects illegal transitions", () => {
     const fsm = new StateMachine();
     expect(() => fsm.transition(GameState.HUNT)).toThrow();

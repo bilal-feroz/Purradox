@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CATS, RIVAL_IDS, type CatId, type RivalId } from "../data/cats";
+import { CAT_IDS, CATS, type CatId } from "../data/cats";
 import { H, SPAWN, ZONES } from "../data/level";
 import { PALETTE } from "../data/palette";
 import { AudioManager } from "../audio/AudioManager";
@@ -37,6 +37,7 @@ import { HUD } from "../ui/HUD";
 import { PauseMenu } from "../ui/PauseMenu";
 import { Results } from "../ui/Results";
 import { StartScreen, type Settings } from "../ui/StartScreen";
+import { loadProgress, markCycleComplete } from "../ui/records";
 import { Stamps } from "../ui/Stamps";
 import { EventBus } from "./EventBus";
 import { GameState, StateMachine } from "./GameState";
@@ -71,7 +72,7 @@ function loadSettings(): Settings {
  * Top-level orchestrator: owns every system, runs the frame loop and the
  * explicit game-state machine. Round logic lives in src/flow/*.
  */
-/** Round 1: seconds without a hit before Fish Cat regains one grip. */
+/** Round 1: seconds without a hit before the thief regains one grip. */
 const GRIP_RECOVER_SECONDS = 8;
 
 export class Game {
@@ -102,10 +103,13 @@ export class Game {
   combat!: CombatSystem;
   interactables!: Interactables;
   pigeons!: PigeonFlock;
-  fishCat!: CatActor;
-  readonly rivals = {} as Record<RivalId, CatActor>;
-  readonly brains = {} as Record<RivalId, RivalBrain>;
+  /** Every cat in the world (any of them can be the thief). */
+  readonly actors = {} as Record<CatId, CatActor>;
+  /** AI brain per cat; used whenever the game (not a human) drives it. */
+  readonly brains = {} as Record<CatId, RivalBrain>;
   readonly cats: CatActor[] = [];
+  /** The Round 1 thief this run. It becomes Past You in Round 2. */
+  runnerId: CatId = "fishcat";
   controller!: CatController;
   echo!: EchoController;
   recorder = new ReplayRecorder("fishcat", 20);
@@ -127,7 +131,9 @@ export class Game {
   plan: TacticalPlan | null = null;
   /** In-flight Tactical Director request (started when the run ends). */
   planRequest: Promise<TacticalPlan> | null = null;
-  hunterId: RivalId | null = null;
+  hunterId: CatId | null = null;
+  /** First full two-round cycle done: unlocks Choose Your Thief. */
+  thiefUnlocked = loadProgress().thiefUnlocked;
   runTime = 0;
   huntTime = 0;
   huntStats: HuntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, echoPerfectHisses: 0 };
@@ -143,7 +149,7 @@ export class Game {
   manualStepping = false;
   settings: Settings;
   private lastZoneIndex = 0;
-  /** Round 1: seconds Fish Cat has carried the fish without losing grip. */
+  /** Round 1: seconds the thief has carried the fish without losing grip. */
   private gripCalmT = 0;
   private lastPlayerGrip = MAX_GRIP;
   private dustTimer = 0;
@@ -187,6 +193,32 @@ export class Game {
     this.applySettings(this.settings);
   }
 
+  /** The cat running Round 1 (and replayed as Past You in Round 2). */
+  get runner(): CatActor {
+    return this.actors[this.runnerId];
+  }
+
+  /** Fish Cat specifically (menu hero shot). */
+  get fishCat(): CatActor {
+    return this.actors.fishcat;
+  }
+
+  /** The three cats that are not the thief: Round 1 rivals, Round 2 hunters. */
+  others(): CatActor[] {
+    return this.cats.filter((c) => c.id !== this.runnerId);
+  }
+
+  otherIds(): CatId[] {
+    return CAT_IDS.filter((id) => id !== this.runnerId);
+  }
+
+  /** A full Round 1 + Round 2 cycle was played: remember it locally. */
+  completeCycle(): void {
+    if (this.thiefUnlocked) return;
+    this.thiefUnlocked = true;
+    markCycleComplete();
+  }
+
   // ====================================================================== boot
   async boot(progress: (p: number, label: string) => void): Promise<void> {
     progress(0.15, "Waking the physics…");
@@ -223,15 +255,12 @@ export class Game {
   private createActors(): void {
     const mats = { fur: this.materials.cat, eye: this.materials.glossy };
     const v = (p: [number, number, number]) => new THREE.Vector3(p[0], p[1], p[2]);
-    this.fishCat = new CatActor("fishcat", this.physics, mats, this.bus, v(SPAWN.fishCat.pos));
-    this.scene.add(this.fishCat.rig.root);
-    this.cats.push(this.fishCat);
-    RIVAL_IDS.forEach((id, i) => {
-      const a = new CatActor(id, this.physics, mats, this.bus, v(SPAWN.rivals[id].pos));
+    CAT_IDS.forEach((id, i) => {
+      const a = new CatActor(id, this.physics, mats, this.bus, v(id === this.runnerId ? SPAWN.runner.pos : SPAWN.ai[id].pos));
       this.scene.add(a.rig.root);
-      this.rivals[id] = a;
+      this.actors[id] = a;
       this.cats.push(a);
-      const brain = new RivalBrain(id, a, 1000 + i * 77);
+      const brain = new RivalBrain(id, a, 923 + i * 77);
       brain.onWantInteract = (cat) => this.aiInteract(cat);
       this.brains[id] = brain;
     });
@@ -240,28 +269,29 @@ export class Game {
     this.combat.cats = this.cats;
     this.controller = new CatController(this.input, this.camera);
     this.controller.targets = this.cats;
-    this.echo = new EchoController(this.fishCat, this.scene, this.materials.cat, this.materials.glossy, this.effects, this.prints);
+    this.echo = new EchoController(this.runner, this.scene, this.materials.cat, this.materials.glossy, this.effects, this.prints);
   }
 
   private registerResettables(): void {
     this.resets.add("fish", () => this.fish.reset());
-    this.resets.add("fishcat", () => {
-      this.fishCat.resetStatus();
-      this.fishCat.mode = "player";
-      this.fishCat.replay = null;
-      this.fishCat.active = true;
-      this.fishCat.movement.setCollisionEnabled(true);
-      this.fishCat.teleport(new THREE.Vector3(...SPAWN.fishCat.pos), SPAWN.fishCat.yaw);
+    // The thief starts at the market; everyone else takes their AI post.
+    this.resets.add("cats", () => {
+      for (const c of this.cats) {
+        c.resetStatus();
+        c.replay = null;
+        c.active = true;
+        c.movement.setCollisionEnabled(true);
+        if (c.id === this.runnerId) {
+          c.mode = "player";
+          this.brains[c.id].enabled = false;
+          c.setForcedAction(null);
+          c.teleport(new THREE.Vector3(...SPAWN.runner.pos), SPAWN.runner.yaw);
+        } else {
+          c.mode = "ai";
+          this.brains[c.id].reset();
+        }
+      }
     });
-    for (const id of RIVAL_IDS) {
-      this.resets.add(`rival:${id}`, () => {
-        const a = this.rivals[id];
-        a.resetStatus();
-        a.mode = "ai";
-        a.active = true;
-        this.brains[id].reset();
-      });
-    }
     for (const it of this.interactables.list) this.resets.register(it);
     this.resets.register(this.pigeons);
     this.resets.add("effects", () => {
@@ -312,22 +342,22 @@ export class Game {
   // ====================================================================== events
   private wireEvents(): void {
     const isRunRecording = () => this.fsm.state === GameState.FISH_RUN && this.recorder.recording;
-    const snap = () => this.snapshotFishCat();
+    const snap = () => this.snapshotRunner();
     this.bus.on("jump", (e) => {
-      if (e.cat === "fishcat" && isRunRecording()) {
+      if (e.cat === this.runnerId && isRunRecording()) {
         this.recorder.event(this.runTime, "jump", undefined, snap);
         this.telemetry.onJump();
       }
       if (this.isControlled(e.cat)) this.effects.dust(new THREE.Vector3(e.x, e.y, e.z), 5, 0.5, 0.6, 0.13);
     });
     this.bus.on("land", (e) => {
-      if (e.cat === "fishcat" && isRunRecording()) this.recorder.event(this.runTime, "land", undefined, snap);
+      if (e.cat === this.runnerId && isRunRecording()) this.recorder.event(this.runTime, "land", undefined, snap);
       if (e.impact > 0.25) this.effects.dust(new THREE.Vector3(e.x, e.y, e.z), Math.round(4 + e.impact * 8), 0.6 + e.impact, 0.8, 0.14 + e.impact * 0.08);
     });
     this.bus.on("pounceStart", (e) => {
       const p = new THREE.Vector3(e.x, e.y, e.z);
       this.effects.dust(p, 6, 0.7, 0.7, 0.15);
-      if (e.cat === "fishcat" && isRunRecording()) {
+      if (e.cat === this.runnerId && isRunRecording()) {
         this.recorder.event(this.runTime, "pounce", { dirX: e.dirX, dirZ: e.dirZ }, snap);
         this.telemetry.onPounce({ t: this.runTime, x: e.x, y: e.y, z: e.z, zone: zoneAt(e.x, e.y, e.z)?.id ?? "" });
       }
@@ -342,32 +372,32 @@ export class Game {
       if (me && me.team !== cat.team && me.abilities.hissReady && me.position.distanceTo(cat.position) < 8) this.hud.cue("hiss");
     });
     this.bus.on("hissStart", (e) => {
-      if (e.cat === "fishcat" && isRunRecording()) {
+      if (e.cat === this.runnerId && isRunRecording()) {
         this.recorder.event(this.runTime, "hiss", { dirX: e.dirX, dirZ: e.dirZ }, snap);
         this.telemetry.onHiss({ t: this.runTime, x: e.x, y: e.y, z: e.z, zone: zoneAt(e.x, e.y, e.z)?.id ?? "" });
       }
     });
     this.bus.on("interact", (e) => {
-      if (e.cat === "fishcat" && isRunRecording()) {
+      if (e.cat === this.runnerId && isRunRecording()) {
         this.recorder.event(this.runTime, "interact", { target: e.target }, snap);
         this.telemetry.onInteract({ t: this.runTime, x: e.x, y: e.y, z: e.z, zone: zoneAt(e.x, e.y, e.z)?.id ?? "", target: e.target });
       }
     });
     this.bus.on("fishPickup", (e) => {
-      if (e.cat === "fishcat" && isRunRecording()) this.recorder.event(this.runTime, "fishPickup", undefined, snap);
+      if (e.cat === this.runnerId && isRunRecording()) this.recorder.event(this.runTime, "fishPickup", undefined, snap);
       // Alerts
+      const byRunner = e.cat === this.runnerId;
       if (this.round === 1) {
-        if (e.cat !== "fishcat" && e.stolen) this.alert("FISH STOLEN!", "stolen");
-        else if (e.cat === "fishcat" && e.recovered) this.alert("FISH RECOVERED!", "recovered");
-        else if (e.cat === "fishcat" && e.stolen) this.alert("FISH RECOVERED!", "recovered");
-        if (e.cat === "fishcat") this.hud.pingObjective(this.time.realTime, 4);
+        if (!byRunner && e.stolen) this.alert("FISH STOLEN!", "stolen");
+        else if (byRunner && (e.recovered || e.stolen)) this.alert("FISH RECOVERED!", "recovered");
+        if (byRunner) this.hud.pingObjective(this.time.realTime, 4);
       } else {
-        if (e.cat === "fishcat" && e.recovered) this.alert("PAST YOU RECOVERED!", "recovered");
+        if (byRunner && e.recovered) this.alert("PAST YOU RECOVERED!", "recovered");
         if (this.controlled && e.cat === this.controlled.id) this.alert("FISH STOLEN!", "stolen");
       }
     });
     this.bus.on("fishDrop", (e) => {
-      if (e.cat === "fishcat" && isRunRecording()) {
+      if (e.cat === this.runnerId && isRunRecording()) {
         this.recorder.event(this.runTime, "fishDrop", undefined, snap);
         this.telemetry.onFishDrop();
       }
@@ -375,29 +405,29 @@ export class Game {
       this.time.slowMo(0.45, 0.3);
       this.camera.addTrauma(0.3);
       // nearby cats notice
-      for (const id of RIVAL_IDS) {
-        const a = this.rivals[id];
+      for (const a of this.cats) {
         if (a.mode === "ai" && a.position.distanceTo(this.fish.position) < 14) a.lookTarget = this.fish.position;
       }
     });
     this.bus.on("gripChanged", (e) => {
-      if (e.cat !== "fishcat") return;
+      if (e.cat !== this.runnerId) return;
       const lost = e.grip < this.lastPlayerGrip;
       this.lastPlayerGrip = e.grip;
       if (lost) this.gripCalmT = 0;
       if (lost && isRunRecording()) {
-        this.telemetry.onGripLoss({ t: this.runTime, x: this.fishCat.position.x, y: this.fishCat.position.y, z: this.fishCat.position.z, zone: zoneAt(this.fishCat.position.x, this.fishCat.position.y, this.fishCat.position.z)?.id ?? "" });
+        const p = this.runner.position;
+        this.telemetry.onGripLoss({ t: this.runTime, x: p.x, y: p.y, z: p.z, zone: zoneAt(p.x, p.y, p.z)?.id ?? "" });
       }
     });
     this.bus.on("perfectHiss", (e) => {
       const involvesPlayer = this.controlled && (e.hisser === this.controlled.id || e.attacker === this.controlled.id);
       if (involvesPlayer || this.round === 2) this.alert("PERFECT HISS!", "perfect");
       if (this.round === 2 && this.controlled && e.hisser === this.controlled.id) this.huntStats.perfectHisses++;
-      if (this.round === 2 && e.hisser === "fishcat") this.huntStats.echoPerfectHisses++;
-      if (this.round === 1 && e.hisser === "fishcat") this.huntStats.perfectHisses++;
+      if (this.round === 2 && e.hisser === this.runnerId) this.huntStats.echoPerfectHisses++;
+      if (this.round === 1 && e.hisser === this.runnerId) this.huntStats.perfectHisses++;
     });
     this.bus.on("respawn", (e) => {
-      if (e.cat === "fishcat" && isRunRecording()) this.recorder.cut(this.runTime, snap);
+      if (e.cat === this.runnerId && isRunRecording()) this.recorder.cut(this.runTime, snap);
     });
     this.audio.subscribe(this.bus, (cat) => this.isControlled(cat));
   }
@@ -407,21 +437,37 @@ export class Game {
       this.audio.unlock();
       this.audio.play("ui");
       // Request pointer lock inside the click gesture (browsers require it).
-      this.input.requestPointerLock();
-      if (this.fsm.state === GameState.MENU) this.fsm.transition(GameState.INTRO);
+      if (this.fsm.state !== GameState.MENU) return;
+      if (this.thiefUnlocked) {
+        this.fsm.transition(GameState.THIEF_SELECTION);
+      } else {
+        // First-ever run: Fish Cat, no choice, the twist stays intact.
+        this.input.requestPointerLock();
+        this.runnerId = "fishcat";
+        this.fsm.transition(GameState.INTRO);
+      }
     };
     this.start.onSettings = (s) => this.applySettings(s);
     this.select.onPick = (id) => {
       this.audio.play("ui");
       this.input.requestPointerLock();
-      this.hunterId = id;
-      if (this.fsm.state === GameState.CAT_SELECTION) this.fsm.transition(GameState.HUNT);
+      if (this.fsm.state === GameState.THIEF_SELECTION) {
+        this.runnerId = id;
+        this.fsm.transition(GameState.INTRO);
+      } else if (this.fsm.state === GameState.CAT_SELECTION && id !== this.runnerId) {
+        this.hunterId = id;
+        this.fsm.transition(GameState.HUNT);
+      }
     };
     this.select.onHover = (id) => {
       if (id) {
-        this.rivals[id].meow();
+        this.actors[id].meow();
         this.audio.play("ui", { pitch: 1.2 });
       }
+    };
+    this.select.onBack = () => {
+      this.audio.play("ui");
+      if (this.fsm.state === GameState.THIEF_SELECTION) this.fsm.transition(GameState.MENU);
     };
     this.results.onRunItBack = () => {
       this.audio.play("ui");
@@ -429,7 +475,9 @@ export class Game {
     };
     this.results.onNewRun = () => {
       this.audio.play("ui");
-      if (this.fsm.state === GameState.RESULTS) this.fsm.transition(GameState.INTRO);
+      if (this.fsm.state !== GameState.RESULTS) return;
+      if (this.thiefUnlocked) this.fsm.transition(GameState.THIEF_SELECTION);
+      else this.fsm.transition(GameState.INTRO);
     };
     this.pause.onResume = () => this.setPaused(false);
     this.pause.onRestart = () => {
@@ -508,13 +556,13 @@ export class Game {
   resetWorld(): void {
     this.resets.resetAll();
     for (const c of this.cats) {
-      c.team = c.id === "fishcat" ? 0 : 1;
+      c.team = c.id === this.runnerId ? 0 : 1;
       c.rig.root.visible = true;
     }
     this.combat.rules = { gripFloor: () => 0, isLocal: (c) => c === this.controlled };
     this.combat.resetStats();
     this.fish.canPickup = () => true;
-    this.fish.pickupGrip = (c) => (c.id === "fishcat" ? 3 : 1);
+    this.fish.pickupGrip = (c) => (c.id === this.runnerId ? 3 : 1);
     this.input.clearBuffers();
     this.lastZoneIndex = 0;
     this.gripCalmT = 0;
@@ -523,8 +571,8 @@ export class Game {
     this.physics.step(1 / 60);
   }
 
-  snapshotFishCat(): Omit<ReplaySnapshot, "t"> {
-    const a = this.fishCat;
+  snapshotRunner(): Omit<ReplaySnapshot, "t"> {
+    const a = this.runner;
     return {
       position: [a.position.x, a.position.y, a.position.z],
       rotationY: a.yaw,
@@ -539,7 +587,8 @@ export class Game {
   }
 
   aiWorld(round: 1 | 2): AIWorld {
-    const q = round === 1 ? this.fishCat : this.fishCat;
+    // Round 1: the live thief. Round 2: the same cat, replayed as Past You.
+    const q = this.runner;
     const z = zoneAt(q.position.x, q.position.y, q.position.z);
     return {
       round,
@@ -571,12 +620,11 @@ export class Game {
     return {
       burstPigeons: (p, r) => this.pigeons.burst(p, r),
       distract: (p, radius, kind, seconds, only) => {
-        for (const id of RIVAL_IDS) {
-          if (only && id !== only) continue;
-          const a = this.rivals[id];
+        for (const a of this.cats) {
+          if (only && a.id !== only) continue;
           if (a.mode !== "ai" || a === source) continue;
           if (a.position.distanceTo(p) > radius) continue;
-          this.brains[id].distract(seconds, p, kind);
+          this.brains[a.id].distract(seconds, p, kind);
         }
       },
       tangle: (p, radius, seconds) => {
@@ -614,8 +662,8 @@ export class Game {
     if (ctl && this.controller.interactPressed) this.tryInteract(ctl);
     if (ctl && round === 2 && this.controller.scentPressed && ctl.abilities.tryScent()) this.scentMemory();
     const world = this.aiWorld(round);
-    for (const id of RIVAL_IDS) {
-      if (this.rivals[id].mode === "ai") this.brains[id].update(dt, world);
+    for (const c of this.cats) {
+      if (c.mode === "ai") this.brains[c.id].update(dt, world);
     }
     if (round === 2) this.echo.update(dt, this.time.realTime);
     for (const c of this.cats) {
@@ -672,7 +720,7 @@ export class Game {
       side *= -1;
       this.prints.add(p.x + ox, p.y, p.z + oz, p.yaw, intensity, 3.4, i * 0.035, 1.5);
     });
-    this.effects.ring(this.controlled ? this.controlled.position : this.fishCat.position, 2.2, PALETTE.seaGlass, 0.6);
+    this.effects.ring(this.controlled ? this.controlled.position : this.runner.position, 2.2, PALETTE.seaGlass, 0.6);
     this.audio.play("scent", { volume: 0.5 });
     this.bus.emit("scentMemory", { duration: 2.6 });
   }
@@ -690,23 +738,24 @@ export class Game {
       const it = this.interactables.nearest(ctl);
       this.hud.setPrompt(it ? it.label : null);
     }
+    const runner = this.runner;
     if (this.round === 1) {
-      const carrying = this.fish.owner === this.fishCat;
+      const carrying = this.fish.owner === runner;
       this.hud.setGrip(carrying ? this.fish.grip.value : 0, carrying);
       const goal = this.tmp.set(...SPAWN.goal);
       if (this.fish.state === "table") {
-        const d = Math.round(this.fishCat.position.distanceTo(this.fish.position));
+        const d = Math.round(runner.position.distanceTo(this.fish.position));
         this.hud.setObjective("STEAL THE FISH", `${d}m`, true, false, "fish");
       } else if (carrying) {
-        const d = Math.round(this.fishCat.position.distanceTo(goal));
-        const still = Math.hypot(this.fishCat.velocity.x, this.fishCat.velocity.z) < 0.5;
+        const d = Math.round(runner.position.distanceTo(goal));
+        const still = Math.hypot(runner.velocity.x, runner.velocity.z) < 0.5;
         this.hud.setObjective("SAFE ROOFTOP", `${d}m`, this.hud.objectiveWanted(now) || still, false, "bowl");
       } else {
-        const d = Math.round(this.fishCat.position.distanceTo(this.fish.position));
+        const d = Math.round(runner.position.distanceTo(this.fish.position));
         this.hud.setObjective("RECOVER THE FISH", `${d}m`, true, true, "fish");
       }
     } else {
-      const echoCarry = this.fish.owner === this.fishCat;
+      const echoCarry = this.fish.owner === runner;
       this.hud.setGrip(echoCarry ? this.fish.grip.value : 0, echoCarry);
       const left = Math.max(0, this.echo.duration - this.echo.time);
       this.hud.setTimeline(this.echo.progress, left);
@@ -719,10 +768,10 @@ export class Game {
     }
   }
 
-  /** Round 1 forgiveness: Fish Cat tightens its grip after a clean stretch. */
+  /** Round 1 forgiveness: the thief tightens its grip after a clean stretch. */
   private updateGripRecovery(dt: number): void {
     const f = this.fish;
-    if (f.owner !== this.fishCat || f.grip.value >= MAX_GRIP) {
+    if (f.owner !== this.runner || f.grip.value >= MAX_GRIP) {
       this.gripCalmT = 0;
       return;
     }
@@ -730,8 +779,8 @@ export class Game {
     if (this.gripCalmT < GRIP_RECOVER_SECONDS) return;
     this.gripCalmT = 0;
     f.grip.reset(f.grip.value + 1);
-    this.bus.emit("gripChanged", { cat: "fishcat", grip: f.grip.value });
-    this.effects.sparkle(this.tmp.copy(this.fishCat.position).setY(this.fishCat.position.y + 0.6), 8, 0xfff3b0, 1.4, 0.45);
+    this.bus.emit("gripChanged", { cat: this.runnerId, grip: f.grip.value });
+    this.effects.sparkle(this.tmp.copy(this.runner.position).setY(this.runner.position.y + 0.6), 8, 0xfff3b0, 1.4, 0.45);
     this.audio.play("pickup", { volume: 0.25, pitch: 1.2 });
   }
 
@@ -742,7 +791,7 @@ export class Game {
     const p = this.trackPos;
     if (this.fsm.is(GameState.FISH_RUN, GameState.HUNT) && !this.photoCamera) {
       if (f.state === "carried" && f.owner && f.owner !== this.controlled) {
-        variant = this.round === 2 && f.owner === this.fishCat ? "echo" : "rival";
+        variant = this.round === 2 && f.owner === this.runner ? "echo" : "rival";
         p.copy(f.owner.position).setY(f.owner.position.y + 0.95);
       } else if (f.state === "loose" || f.state === "flying") {
         variant = "loose";

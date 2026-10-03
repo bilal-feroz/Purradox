@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CATS, type CatId } from "../data/cats";
+import { CATS, PLAYER_STATS, type CatDef, type CatId } from "../data/cats";
 import type { EventBus } from "../core/EventBus";
 import { CatAnimator, type CatAction } from "../player/CatAnimator";
 import { AI_POUNCE_WINDUP, CatAbilities, POUNCE_WINDUP } from "../player/CatAbilities";
@@ -31,7 +31,8 @@ export class CatActor {
   readonly animator: CatAnimator;
   readonly movement: CatMovement;
   readonly abilities: CatAbilities;
-  mode: DriveMode = "ai";
+  readonly def: CatDef;
+  private driveMode: DriveMode = "ai";
   team = 1;
   active = true;
 
@@ -76,11 +77,30 @@ export class CatActor {
   ) {
     this.id = id;
     const def = CATS[id];
+    this.def = def;
     this.rig = buildCat(def, mats);
     this.animator = new CatAnimator(this.rig);
     this.movement = new CatMovement(physics, { ...def.stats }, spawn, isEcho);
     this.abilities = new CatAbilities(def.stats);
     this.rig.root.position.copy(spawn);
+  }
+
+  /**
+   * Who drives this cat. Player-driven (and replayed player) cats all use
+   * PLAYER_STATS so every thief and hunter plays by identical rules; the
+   * per-cat stats only flavor AI rivals.
+   */
+  get mode(): DriveMode {
+    return this.driveMode;
+  }
+
+  set mode(m: DriveMode) {
+    this.driveMode = m;
+    const s = m === "ai" || m === "scripted" ? this.def.stats : PLAYER_STATS;
+    this.movement.stats = { ...s };
+    this.abilities.stats = s;
+    this.abilities.pounceCooldownMax = s.pounceCooldown;
+    this.abilities.hissCooldownMax = s.hissCooldown;
   }
 
   get position(): THREE.Vector3 {

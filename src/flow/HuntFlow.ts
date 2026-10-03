@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { RIVAL_IDS, type RivalId } from "../data/cats";
+import { CATS } from "../data/cats";
 import { SPAWN } from "../data/level";
 import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
@@ -7,8 +7,7 @@ import { formatClock } from "../core/math";
 import type { Mission } from "../cats/CatAI";
 import { zoneAt } from "../level/Zones";
 import type { ReplayData } from "../replay/ReplayTypes";
-import type { TacticalPlan } from "../ai/TacticalFallback";
-import { heuristicPlan } from "../ai/TacticalFallback";
+import { castAssignments, heuristicPlan, type Assignment } from "../ai/TacticalFallback";
 import { recordSteal } from "../ui/records";
 
 const HUNT_INTRO = 1.2;
@@ -20,12 +19,11 @@ const ECHO_TELL_LEAD = 0.3;
  * Past You's ACTUAL recorded route: find when the recording enters each
  * preferred zone and send the helper there early enough to be waiting.
  */
-export function planMissions(g: Game, plan: TacticalPlan, replay: ReplayData, cat: RivalId): Mission[] {
-  const a = plan.assignments.find((x) => x.cat === cat);
-  if (!a) return [];
+export function planMissions(g: Game, a: Assignment, replay: ReplayData): Mission[] {
+  const cat = a.cat;
   const snaps = replay.snapshots;
   const missions: Mission[] = [];
-  const helper = g.rivals[cat];
+  const helper = g.actors[cat];
   const start = new THREE.Vector3(...SPAWN.hunters[cat].pos);
   const speed = helper.stats.sprintSpeed * 0.85;
   const used = new Set<string>();
@@ -72,18 +70,22 @@ export function registerHuntFlow(g: Game): void {
   g.fsm.register(GameState.HUNT, {
     enter: () => {
       const replay = g.replay;
-      const hunterId = g.hunterId ?? "mochi";
       if (!replay) throw new Error("HUNT without a recording");
+      // The hunter is never the thief (that cat is Past You).
+      const hunterId = g.hunterId && g.hunterId !== g.runnerId ? g.hunterId : g.otherIds()[0];
+      g.hunterId = hunterId;
       g.setPaused(false);
       g.resetWorld();
       g.round = 2;
       g.huntSuccess = false;
       g.huntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, echoPerfectHisses: 0 };
       g.history.clear();
-      const hunter = g.rivals[hunterId];
+      const hunter = g.actors[hunterId];
+      const pastYou = g.runner;
       // Past You
-      g.fishCat.mode = "replay";
-      g.fishCat.team = 0;
+      pastYou.mode = "replay";
+      pastYou.team = 0;
+      g.echo.bind(pastYou);
       g.echo.load(replay);
       g.echo.prime();
       tells = replay.events
@@ -93,54 +95,56 @@ export function registerHuntFlow(g: Game): void {
       tellIdx = 0;
       g.echo.setEchoLook(true);
       // Hunter
-      for (const id of RIVAL_IDS) g.rivals[id].team = 1;
+      for (const c of g.others()) c.team = 1;
       hunter.mode = "player";
       g.brains[hunterId].enabled = false;
       hunter.setForcedAction(null);
       const hs = SPAWN.hunters[hunterId];
       hunter.teleport(new THREE.Vector3(...hs.pos), hs.yaw);
       g.controlled = hunter;
-      // Allies follow the Alley Council plan
+      // Allies (the two cats that are neither thief nor hunter) take the
+      // Alley Council's roles.
       const plan = g.plan ?? heuristicPlan(g.telemetry.summary());
       g.plan = plan;
-      for (const id of RIVAL_IDS) {
-        if (id === hunterId) continue;
-        const brain = g.brains[id];
+      const allies = g.others().filter((c) => c !== hunter);
+      for (const a of castAssignments(plan, allies.map((c) => c.id))) {
+        const brain = g.brains[a.cat];
         brain.enabled = true;
-        const ally = g.rivals[id];
-        const s = SPAWN.hunters[id];
+        const ally = g.actors[a.cat];
+        const s = SPAWN.hunters[a.cat];
         ally.teleport(new THREE.Vector3(...s.pos), s.yaw);
         ally.setForcedAction(null);
         brain.echoTime = () => g.echo.time;
-        brain.setMissions(planMissions(g, plan, replay, id));
-        g.debug?.log(`${id} missions: ${brain.missions.map((m) => `${m.zone}@${m.arriveAt.toFixed(1)}s`).join(", ")}`);
+        brain.setMissions(planMissions(g, a, replay));
+        g.debug?.log(`${a.cat} (${a.role}) missions: ${brain.missions.map((m) => `${m.zone}@${m.arriveAt.toFixed(1)}s`).join(", ")}`);
       }
       // Rules
-      g.fish.reservedFor = g.fishCat;
-      g.fish.canPickup = (c) => c === g.fishCat || c === hunter;
-      g.fish.pickupGrip = (c, fromTable) => (c === g.fishCat ? (fromTable ? 3 : 1) : 3);
+      g.fish.reservedFor = pastYou;
+      g.fish.canPickup = (c) => c === pastYou || c === hunter;
+      g.fish.pickupGrip = (c, fromTable) => (c === pastYou ? (fromTable ? 3 : 1) : 3);
       g.combat.rules = {
         gripFloor: (attacker) => (attacker === hunter ? 0 : 1),
         isLocal: (c) => c === hunter,
       };
       g.echo.onEvent = (ev) => {
-        const a = g.fishCat;
+        const a = pastYou;
+        const id = pastYou.id;
         const p = a.position;
         switch (ev.type) {
           case "jump":
             a.animator.takeoff();
-            g.bus.emit("jump", { cat: "fishcat", x: p.x, y: p.y, z: p.z });
+            g.bus.emit("jump", { cat: id, x: p.x, y: p.y, z: p.z });
             break;
           case "pounce": {
             const dir = new THREE.Vector3(ev.payload?.dirX ?? Math.sin(a.yaw), 0, ev.payload?.dirZ ?? Math.cos(a.yaw));
             a.abilities.forcePounce(dir);
-            g.bus.emit("pounceStart", { cat: "fishcat", dirX: dir.x, dirZ: dir.z, x: p.x, y: p.y, z: p.z });
+            g.bus.emit("pounceStart", { cat: id, dirX: dir.x, dirZ: dir.z, x: p.x, y: p.y, z: p.z });
             break;
           }
           case "hiss": {
             const dir = new THREE.Vector3(ev.payload?.dirX ?? Math.sin(a.yaw), 0, ev.payload?.dirZ ?? Math.cos(a.yaw));
             a.abilities.forceHiss(dir);
-            g.bus.emit("hissStart", { cat: "fishcat", dirX: dir.x, dirZ: dir.z, x: p.x, y: p.y, z: p.z });
+            g.bus.emit("hissStart", { cat: id, dirX: dir.x, dirZ: dir.z, x: p.x, y: p.y, z: p.z });
             break;
           }
           case "interact":
@@ -158,6 +162,7 @@ export function registerHuntFlow(g: Game): void {
       };
       // Presentation
       g.hud.setRound(2);
+      g.hud.setEchoColor(CATS[g.runnerId].colors.main);
       g.hud.clearAlerts();
       g.hud.show(true);
       const dur = Math.max(0.001, replay.duration);
@@ -208,10 +213,10 @@ export function registerHuntFlow(g: Game): void {
         // same "!" language the rivals use in Round 1.
         while (tellIdx < tells.length && tells[tellIdx].t - g.echo.time <= ECHO_TELL_LEAD) {
           const tell = tells[tellIdx++];
-          const p = g.fishCat.position;
+          const p = g.runner.position;
           if (tell.t < g.echo.time || p.distanceTo(hunter.position) > 9) continue;
           if (tell.kind === "pounce") {
-            g.bus.emit("pounceTell", { cat: "fishcat", x: p.x, y: p.y, z: p.z });
+            g.bus.emit("pounceTell", { cat: g.runnerId, x: p.x, y: p.y, z: p.z });
           } else {
             g.effects.exclaim(p);
             g.audio.play("tell", { at: p, volume: 0.35 });
@@ -225,7 +230,7 @@ export function registerHuntFlow(g: Game): void {
           g.fsm.transition(GameState.HUNT_COMPLETE);
           return;
         }
-        if (g.echo.finished && g.fish.owner === g.fishCat) {
+        if (g.echo.finished && g.fish.owner === g.runner) {
           g.huntSuccess = false;
           g.fsm.transition(GameState.HUNT_COMPLETE);
           return;
@@ -255,11 +260,11 @@ export function registerHuntFlow(g: Game): void {
         g.audio.play("victory", { volume: 0.6 });
         g.audio.setTemporalHum(false);
         // Past You's timeline shatters into sea-glass motes
-        g.effects.motes(g.fishCat.position, 60, 1.2);
-        g.effects.sparkle(g.fishCat.center(), 30, 0x7ff3dc, 4, 1);
+        g.effects.motes(g.runner.position, 60, 1.2);
+        g.effects.sparkle(g.runner.center(), 30, 0x7ff3dc, 4, 1);
         g.alert("TIMELINE BROKEN!", "perfect");
       } else {
-        g.fishCat.meow();
+        g.runner.meow();
         g.audio.play("fail", { volume: 0.5 });
         g.time.slowMo(0.8, 0.5);
       }
@@ -271,13 +276,14 @@ export function registerHuntFlow(g: Game): void {
       const hunter = g.controlled!;
       if (g.huntSuccess) {
         hunter.updateScripted(dt);
-        if (outcomeT > 0.35) g.fishCat.rig.root.visible = outcomeT < 0.4 ? true : Math.sin(outcomeT * 40) > 0 && outcomeT < 1.0;
-        if (outcomeT > 1.0) g.fishCat.rig.root.visible = false;
+        const past = g.runner.rig.root;
+        if (outcomeT > 0.35) past.visible = outcomeT < 0.4 ? true : Math.sin(outcomeT * 40) > 0 && outcomeT < 1.0;
+        if (outcomeT > 1.0) past.visible = false;
         g.updateFollowCamera(realDt);
       } else {
-        g.fishCat.setForcedAction("victory");
-        g.fishCat.updateScripted(dt);
-        const p = g.fishCat.position;
+        g.runner.setForcedAction("victory");
+        g.runner.updateScripted(dt);
+        const p = g.runner.position;
         g.camera.setCinematic(new THREE.Vector3(p.x - 2.4, p.y + 1.6, p.z + 3.4), new THREE.Vector3(p.x, p.y + 0.5, p.z), 2.2);
         g.camera.update(realDt, null, null);
       }
@@ -288,6 +294,8 @@ export function registerHuntFlow(g: Game): void {
 
   g.fsm.register(GameState.RESULTS, {
     enter: () => {
+      // One full Round 1 + Round 2 cycle: Choose Your Thief unlocks.
+      g.completeCycle();
       g.hud.show(false);
       g.audio.setMusic("menu");
       g.audio.setTemporalHum(false);
@@ -297,7 +305,7 @@ export function registerHuntFlow(g: Game): void {
             ["FISH RUN", formatClock(runT)],
             ["FISH STOLEN AT", formatClock(g.huntStats.stolenAt ?? 0)],
             ["PERFECT HISSES", String(g.huntStats.perfectHisses)],
-            ["HUNTER", (g.hunterId ?? "").toUpperCase()],
+            ["HUNTER", g.hunterId ? CATS[g.hunterId].title : "—"],
           ]
         : [
             ["FISH RUN", formatClock(runT)],
@@ -310,11 +318,11 @@ export function registerHuntFlow(g: Game): void {
     update: (dt) => {
       g.camera.update(dt, null, null);
       if (g.controlled) g.controlled.updateScripted(dt);
-      g.fishCat.updateScripted(dt);
+      g.runner.updateScripted(dt);
     },
     exit: () => {
       g.results.show(null);
-      g.fishCat.rig.root.visible = true;
+      g.runner.rig.root.visible = true;
       g.renderer.temporalUniforms.uEdge.value = 0;
       g.lighting.temporalBlend = 0;
     },

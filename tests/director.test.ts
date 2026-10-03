@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TelemetryTracker, type TelemetrySummary } from "../src/ai/TelemetrySummary";
-import { heuristicPlan } from "../src/ai/TacticalFallback";
+import { castAssignments, heuristicPlan, planFor, STRATEGY_IDS } from "../src/ai/TacticalFallback";
 import { TacticalDirector, compact, parsePlan, type StrategyProvider } from "../src/ai/TacticalDirector";
 
 function summary(over: Partial<TelemetrySummary>): TelemetrySummary {
@@ -111,5 +111,25 @@ describe("Tactical Director (optional provider)", () => {
     const c = compact(summary({ elevatedRatio: 0.333333 }));
     expect(Object.keys(c).sort()).toEqual(["avgSpeed", "awningShortcut", "elevatedRatio", "fishDrops", "hisses", "interactions", "pounces", "rooftopShortcut", "runSeconds", "sprintRatio", "zoneSeconds"].sort());
     expect(c.elevatedRatio).toBe(0.33);
+  });
+});
+
+describe("Role casting (any thief, any hunter)", () => {
+  it("keeps named cats in their slots and refills the rest by archetype", () => {
+    const plan = planFor("rooftop_trap", [], "heuristic");
+    // Thief = Soot, hunter = Beans: only Fish Cat and Mochi can help.
+    const cast = castAssignments(plan, ["fishcat", "mochi"]);
+    expect(cast.map((a) => a.cat).sort()).toEqual(["fishcat", "mochi"]);
+    expect(cast.find((a) => a.cat === "mochi")?.role).toBe("pressure");
+    // The ambush slot (the plan's first priority) goes to the opportunist.
+    expect(cast.find((a) => a.cat === "fishcat")?.role).toBe("ambush");
+  });
+
+  it("never casts a cat that is not available", () => {
+    for (const id of STRATEGY_IDS) {
+      const cast = castAssignments(planFor(id, [], "heuristic"), ["fishcat"]);
+      expect(cast).toHaveLength(1);
+      expect(cast[0].cat).toBe("fishcat");
+    }
   });
 });

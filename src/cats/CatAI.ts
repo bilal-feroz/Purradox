@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import type { RivalId } from "../data/cats";
-import { SOOT_AMBUSH, SPAWN, type V3 } from "../data/level";
+import { CATS, type Archetype, type CatId } from "../data/cats";
+import { AMBUSH_SPOTS, SPAWN, type V3 } from "../data/level";
 import { Random } from "../core/Random";
 import type { FishSystem } from "../fish/Fish";
 import type { NavNode, WaypointGraph } from "../level/WaypointGraph";
@@ -46,6 +46,7 @@ export interface Mission {
 }
 
 interface Personality {
+  archetype: Archetype;
   chaseSprint: boolean;
   pounceRange: number;
   pounceChance: number;
@@ -56,12 +57,20 @@ interface Personality {
   notice: number;
   speedR1: number;
   aimError: number;
+  /** How far away a loose fish pulls this cat off its plan (m). */
+  fishSense: number;
 }
 
-const PERSONALITY: Record<RivalId, Personality> = {
-  mochi: { chaseSprint: true, pounceRange: 3.3, pounceChance: 0.9, pounceCooldown: 2.4, leash: 34, maxZone: 4, hissBackChance: 0.12, notice: 0.45, speedR1: 0.9, aimError: 0.16 },
-  soot: { chaseSprint: true, pounceRange: 4.4, pounceChance: 0.85, pounceCooldown: 3.0, leash: 18, maxZone: 6, hissBackChance: 0.4, notice: 0.25, speedR1: 0.9, aimError: 0.12 },
-  beans: { chaseSprint: true, pounceRange: 2.9, pounceChance: 0.55, pounceCooldown: 2.6, leash: 22, maxZone: 8, hissBackChance: 0.22, notice: 0.3, speedR1: 0.92, aimError: 0.34 },
+/** AI personalities by archetype (any cat that is not the thief uses its own). */
+const PERSONALITY: Record<Archetype, Personality> = {
+  // Mochi: fast direct pursuit, early pressure, frequent predictable pounces.
+  sprinter: { archetype: "sprinter", chaseSprint: true, pounceRange: 3.3, pounceChance: 0.9, pounceCooldown: 2.4, leash: 34, maxZone: 4, hissBackChance: 0.12, notice: 0.45, speedR1: 0.9, aimError: 0.16, fishSense: 16 },
+  // Soot: holds chokepoints and landing zones ahead of the thief.
+  ambusher: { archetype: "ambusher", chaseSprint: true, pounceRange: 4.4, pounceChance: 0.85, pounceCooldown: 3.0, leash: 18, maxZone: 6, hissBackChance: 0.4, notice: 0.25, speedR1: 0.9, aimError: 0.12, fishSense: 16 },
+  // Beans: props, distractions, odd routes, less direct pressure.
+  chaos: { archetype: "chaos", chaseSprint: true, pounceRange: 2.9, pounceChance: 0.55, pounceCooldown: 2.6, leash: 22, maxZone: 8, hissBackChance: 0.22, notice: 0.3, speedR1: 0.92, aimError: 0.34, fishSense: 16 },
+  // Fish Cat: balanced, shortcut-aware route cutter, first to any dropped fish.
+  opportunist: { archetype: "opportunist", chaseSprint: true, pounceRange: 3.4, pounceChance: 0.72, pounceCooldown: 2.6, leash: 26, maxZone: 7, hissBackChance: 0.25, notice: 0.35, speedR1: 0.9, aimError: 0.2, fishSense: 26 },
 };
 
 const _v = new THREE.Vector3();
@@ -108,12 +117,12 @@ export class RivalBrain {
   onWantInteract: ((cat: CatActor) => void) | null = null;
 
   constructor(
-    readonly id: RivalId,
+    readonly id: CatId,
     readonly actor: CatActor,
     seed: number,
   ) {
-    this.p = PERSONALITY[id];
-    const s = SPAWN.rivals[id];
+    this.p = PERSONALITY[CATS[id].archetype];
+    const s = SPAWN.ai[id];
     this.home = new THREE.Vector3(...s.pos);
     this.homeYaw = s.yaw;
     this.rng = new Random(seed);
@@ -141,7 +150,7 @@ export class RivalBrain {
     this.interactCooldown = 0;
     this.lastProgress.copy(this.home);
     this.actor.teleport(this.home, this.homeYaw);
-    this.actor.setForcedAction(this.id === "soot" ? "crouch" : "sit");
+    this.actor.setForcedAction(this.p.archetype === "ambusher" ? "crouch" : "sit");
   }
 
   setMissions(ms: Mission[]): void {
@@ -214,7 +223,7 @@ export class RivalBrain {
     if (w.rivalsMayCarry && fish.owner === a && this.state !== "ESCAPE_WITH_FISH") this.go("ESCAPE_WITH_FISH");
     if (w.rivalsMayCarry && (fish.state === "loose" || fish.state === "flying") && this.state !== "DISTRACTED") {
       const df = a.position.distanceTo(fish.position);
-      if (df < 16 && this.state !== "FISH_CHASE") this.go("FISH_CHASE");
+      if (df < this.p.fishSense && this.state !== "FISH_CHASE") this.go("FISH_CHASE");
     }
     if (this.state === "FISH_CHASE" && fish.state !== "loose" && fish.state !== "flying") this.go("CHASE");
 
@@ -226,7 +235,7 @@ export class RivalBrain {
         a.setForcedAction(null);
         a.lookTarget = q.center(_knee2);
         this.faceToward(q.position);
-        if (this.stateT > this.p.notice) this.go(this.id === "soot" ? "AMBUSH" : "CHASE");
+        if (this.stateT > this.p.notice) this.go(this.p.archetype === "ambusher" ? "AMBUSH" : this.p.archetype === "opportunist" ? "INTERCEPT" : "CHASE");
         break;
       case "CHASE":
       case "INTERCEPT":
@@ -250,7 +259,7 @@ export class RivalBrain {
       case "RETURN":
         if (this.moveTo(this.home, dt, w, false) < 1.0) {
           this.go("IDLE");
-          a.setForcedAction(this.id === "soot" ? "crouch" : "sit");
+          a.setForcedAction(this.p.archetype === "ambusher" ? "crouch" : "sit");
         }
         if (distQ < 7 && w.quarryZone <= this.p.maxZone) this.go("CHASE");
         break;
@@ -269,14 +278,21 @@ export class RivalBrain {
     if (w.round === 2) return;
     const qCarrying = fish.owner === w.quarry;
     if (qCarrying && !this.sawPickup) this.sawPickup = true;
-    if (this.id === "mochi") {
-      if ((this.sawPickup && distQ < 26) || distQ < 7) this.go("NOTICE");
-    } else if (this.id === "soot") {
-      if (this.sawPickup && w.quarryZone >= 3) this.go("AMBUSH");
-    } else {
-      // Beans: wanders the rooftops looking for trouble
-      if (this.sawPickup && (w.quarryZone >= 5 || distQ < 14)) this.go("CHASE");
-      else this.wander(dt, w, 6);
+    switch (this.p.archetype) {
+      case "sprinter":
+        if ((this.sawPickup && distQ < 26) || distQ < 7) this.go("NOTICE");
+        break;
+      case "ambusher":
+        if (this.sawPickup && w.quarryZone >= 3) this.go("AMBUSH");
+        break;
+      case "opportunist":
+        // waits between both routes; moves once the thief is within reach
+        if ((this.sawPickup && distQ < this.p.leash - 2) || distQ < 8) this.go("NOTICE");
+        break;
+      default:
+        // chaos: wanders the rooftops looking for trouble
+        if (this.sawPickup && (w.quarryZone >= 5 || distQ < 14)) this.go("CHASE");
+        else this.wander(dt, w, 6);
     }
     void a;
   }
@@ -303,23 +319,26 @@ export class RivalBrain {
     const q = w.quarry;
     // leash
     if (w.round === 1 && (distQ > this.p.leash || w.quarryZone > this.p.maxZone)) {
-      if (this.id === "soot") this.go("AMBUSH");
-      else if (this.id === "beans") {
+      if (this.p.archetype === "ambusher") this.go("AMBUSH");
+      else if (this.p.archetype === "chaos") {
         if (distQ > this.p.leash * 1.6) this.go("RETURN");
       } else this.go("RETURN");
       return;
     }
-    const lead = Math.min(0.6, distQ / 9);
+    // Opportunists cut the route: aim far ahead of the thief and let the
+    // waypoint graph find the shortcut; close in normally once near.
+    const cutting = this.p.archetype === "opportunist" && distQ > 7;
+    const lead = cutting ? Math.min(2.4, distQ / 5) : Math.min(0.6, distQ / 9);
     w.predict(lead, _p);
-    // Beans orbits instead of charging straight in.
-    if (this.id === "beans" && distQ < 6 && distQ > 2.4) {
+    // Chaos cats orbit instead of charging straight in.
+    if (this.p.archetype === "chaos" && distQ < 6 && distQ > 2.4) {
       const ang = Math.atan2(a.position.x - q.position.x, a.position.z - q.position.z) + dt * 2.2;
       _p.set(q.position.x + Math.sin(ang) * 3.2, q.position.y, q.position.z + Math.cos(ang) * 3.2);
     }
     this.moveTo(_p, dt, w, this.p.chaseSprint || distQ > 6);
     this.tryPounce(w, distQ);
-    // Beans plays with props near the action
-    if (this.id === "beans" && this.interactCooldown <= 0 && this.rng.chance(dt * 0.4)) {
+    // chaos cats play with props near the action
+    if (this.p.archetype === "chaos" && this.interactCooldown <= 0 && this.rng.chance(dt * 0.4)) {
       this.interactCooldown = 4;
       this.onWantInteract?.(a);
     }
@@ -357,8 +376,8 @@ export class RivalBrain {
   private updateAmbush(dt: number, w: AIWorld, distQ: number): void {
     const a = this.actor;
     // pick the next ambush spot ahead of the quarry
-    while (this.ambushIndex < SOOT_AMBUSH.length - 1 && this.spotPassed(SOOT_AMBUSH[this.ambushIndex], w)) this.ambushIndex++;
-    const spot = SOOT_AMBUSH[this.ambushIndex];
+    while (this.ambushIndex < AMBUSH_SPOTS.length - 1 && this.spotPassed(AMBUSH_SPOTS[this.ambushIndex], w)) this.ambushIndex++;
+    const spot = AMBUSH_SPOTS[this.ambushIndex];
     _v.set(spot[0], spot[1], spot[2]);
     const d = this.moveTo(_v, dt, w, distQ > 10, 0.6);
     if (d < 0.9) {
@@ -371,7 +390,7 @@ export class RivalBrain {
       a.setForcedAction(null);
       if (!this.tryPounce(w, distQ) && distQ < 4.2) this.go("CHASE");
     }
-    if (this.spotPassed(spot, w) && this.ambushIndex >= SOOT_AMBUSH.length - 1 && distQ > 10) {
+    if (this.spotPassed(spot, w) && this.ambushIndex >= AMBUSH_SPOTS.length - 1 && distQ > 10) {
       a.setForcedAction(null);
       this.go("RETURN");
     }
@@ -406,7 +425,7 @@ export class RivalBrain {
     }
     if (this.distractT <= 0) {
       if (a.forcedAction === "eat") a.setForcedAction(null);
-      this.go(this.helper ? "MISSION" : this.id === "soot" ? "AMBUSH" : "CHASE");
+      this.go(this.helper ? "MISSION" : this.p.archetype === "ambusher" ? "AMBUSH" : "CHASE");
     }
   }
 

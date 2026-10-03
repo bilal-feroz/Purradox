@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { CatId } from "../data/cats";
 import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
 import type { Autopilot, RoutePoint } from "./Autopilot";
@@ -80,21 +81,22 @@ export class TestHarness {
     ];
   }
 
-  /** Play Round 1 with the autopilot. */
-  runR1(rivals = false, route?: RoutePoint[]): ReturnType<Autopilot["run"]> {
+  /** Play Round 1 with the autopilot (optionally as a different thief). */
+  runR1(rivals = false, route?: RoutePoint[], runner: CatId = "fishcat"): ReturnType<Autopilot["run"]> {
     const g = this.g;
     g.autoPause = false;
     if (g.fsm.state !== GameState.MENU && g.fsm.canTransition(GameState.MENU)) g.fsm.transition(GameState.MENU);
+    g.runnerId = runner;
     if (g.fsm.state === GameState.MENU) g.fsm.transition(GameState.INTRO);
     else if (g.fsm.canTransition(GameState.INTRO)) g.fsm.transition(GameState.INTRO);
     this.step(100);
-    if (!rivals) for (const id of ["mochi", "soot", "beans"] as const) g.brains[id].enabled = false;
+    if (!rivals) for (const c of g.others()) g.brains[c.id].enabled = false;
     this.ap.start(route ?? this.mainRoute());
     return this.ap.run(4000);
   }
 
   /** From the end of Round 1 to the start of the hunt. */
-  toHunt(hunter: "mochi" | "soot" | "beans"): string {
+  toHunt(hunter: CatId): string {
     const g = this.g;
     this.stepUntil(() => g.fsm.state === GameState.CAT_SELECTION, 1500);
     if (g.fsm.state !== GameState.CAT_SELECTION) return g.fsm.state;
@@ -108,7 +110,7 @@ export class TestHarness {
   lineup(angle = 0.5, dist = 4.6, height = 0.9, spacing = 1.7): void {
     const g = this.g;
     document.querySelectorAll<HTMLElement>("#ui-root .screen").forEach((s) => (s.style.display = "none"));
-    const cats = [g.fishCat, g.rivals.mochi, g.rivals.soot, g.rivals.beans];
+    const cats = g.cats;
     const center = new THREE.Vector3(8, 2.2, -17.5);
     cats.forEach((c, i) => {
       c.mode = "scripted";
@@ -146,7 +148,7 @@ export class TestHarness {
   huntShot(echoTime: number, back = 4.2, side = 1.4, scent = true): string {
     const g = this.g;
     this.stepUntil(() => g.echo.time >= echoTime || !g.echo.running, 4000);
-    const pc = g.fishCat;
+    const pc = g.runner;
     const h = g.controlled!;
     const fx = Math.sin(pc.yaw);
     const fz = Math.cos(pc.yaw);
@@ -171,7 +173,7 @@ export class TestHarness {
       g.bus.on("fishDrop", (e) => events.push(`drop:${e.cat}@${g.echo.time.toFixed(2)}`)),
     ];
     this.stepUntil(() => g.echo.time >= echoTime || !g.echo.running, 6000);
-    const pc = g.fishCat;
+    const pc = g.runner;
     const h = g.controlled!;
     const fwd = new THREE.Vector3(Math.sin(pc.yaw), 0, Math.cos(pc.yaw));
     const p = pc.position.clone().addScaledVector(fwd, distance);

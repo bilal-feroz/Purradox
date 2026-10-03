@@ -1749,6 +1749,26 @@ body {
   gap: clamp(30px, 14vw, 230px);
 }
 
+.cards.four {
+  gap: clamp(14px, 3.4vw, 64px);
+}
+
+.cards.four .card {
+  width: 196px;
+}
+
+.select-back {
+  position: absolute;
+  left: 3vw;
+  top: 4vh;
+}
+
+.select-back .flip svg {
+  transform: scaleX(-1);
+  width: 12px;
+  height: 18px;
+}
+
 .card {
   width: 210px;
   cursor: pointer;

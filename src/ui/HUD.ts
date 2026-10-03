@@ -126,6 +126,11 @@ export class HUD {
     this.root.classList.toggle("show", on);
   }
 
+  /** Past You's timeline marker takes the thief's own fur colour. */
+  setEchoColor(hex: number): void {
+    this.tlCat.innerHTML = ICONS.catHead(`#${hex.toString(16).padStart(6, "0")}`);
+  }
+
   setRound(round: 1 | 2): void {
     this.roundTag.textContent = round === 1 ? "ROUND 1" : "ROUND 2";
     this.timeline.style.display = round === 2 ? "block" : "none";

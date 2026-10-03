@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CATS } from "../data/cats";
+import { CATS, type CatDef } from "../data/cats";
 import { PALETTE } from "../data/palette";
 import type { CatActor } from "../cats/CatActor";
 import { applyPose, buildCat, capturePose, poseSize, type CatRig } from "../cats/CatModel";
@@ -41,7 +41,7 @@ interface Ghost {
 }
 
 /**
- * Drives Fish Cat as "Past You" from a recorded run. The transform is
+ * Drives the Round 1 thief as "Past You" from a recorded run. The transform is
  * always the authoritative replay sample; hits only add a visual flinch
  * that springs back, so the timeline can never be pushed off course.
  */
@@ -53,6 +53,8 @@ export class EchoController {
   readonly authoritative = new THREE.Vector3();
   private readonly sample = emptySample();
   private readonly ghosts: Ghost[] = [];
+  private ghostsFor: string | null = null;
+  private readonly ghostMats: THREE.MeshBasicMaterial[] = [];
   private readonly poseRing: Float32Array[] = [];
   private ringHead = 0;
   private moteTimer = 0;
@@ -63,7 +65,7 @@ export class EchoController {
   readonly tmp = new THREE.Vector3();
 
   constructor(
-    readonly actor: CatActor,
+    public actor: CatActor,
     private readonly scene: THREE.Scene,
     furMat: THREE.MeshStandardMaterial,
     eyeMat: THREE.MeshStandardMaterial,
@@ -72,31 +74,46 @@ export class EchoController {
   ) {
     this.echoFur = withRim(furMat);
     this.echoEye = withRim(eyeMat);
-    for (const m of actor.rig.meshes) m.userData.baseMat = m.material;
     // Two faint, offset afterimages (sea-glass + pink) read as a subtle
     // chromatic split while Past You moves — never a full ghost.
-    const tints = [PALETTE.seaGlass, PALETTE.temporalPink];
+    for (const tint of [PALETTE.seaGlass, PALETTE.temporalPink]) {
+      this.ghostMats.push(
+        new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+      );
+    }
+    this.bind(actor);
+  }
+
+  /** Make `actor` (whoever ran Round 1) the cat that plays Past You. */
+  bind(actor: CatActor): void {
+    if (actor !== this.actor) this.setEchoLook(false);
+    this.actor = actor;
+    for (const m of actor.rig.meshes) if (!m.userData.baseMat) m.userData.baseMat = m.material;
+    if (this.ghostsFor === actor.id) return;
+    this.buildGhosts(CATS[actor.id]);
+    this.poseRing.length = 0;
+    const size = poseSize(actor.rig);
+    for (let i = 0; i < 16; i++) this.poseRing.push(new Float32Array(size));
+  }
+
+  private buildGhosts(def: CatDef): void {
+    for (const g of this.ghosts) {
+      this.scene.remove(g.rig.root);
+      g.rig.root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    }
+    this.ghosts.length = 0;
     const delays = [0.09, 0.17];
-    for (let i = 0; i < 2; i++) {
-      const mat = new THREE.MeshBasicMaterial({
-        color: tints[i],
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        toneMapped: false,
-      });
-      const rig = buildCat(CATS.fishcat, { fur: mat, eye: mat });
+    this.ghostMats.forEach((mat, i) => {
+      const rig = buildCat(def, { fur: mat, eye: mat });
       for (const m of rig.meshes) {
         m.castShadow = false;
         m.receiveShadow = false;
       }
-      rig.root.visible = false;
-      scene.add(rig.root);
+      rig.root.visible = this.looks;
+      this.scene.add(rig.root);
       this.ghosts.push({ rig, delay: delays[i], frames: 5 + i * 5, mat });
-    }
-    const size = poseSize(actor.rig);
-    for (let i = 0; i < 16; i++) this.poseRing.push(new Float32Array(size));
+    });
+    this.ghostsFor = def.id;
   }
 
   load(data: ReplayData): void {

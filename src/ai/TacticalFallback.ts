@@ -1,11 +1,11 @@
-import type { RivalId } from "../data/cats";
+import { CATS, type Archetype, type CatId } from "../data/cats";
 import type { TelemetrySummary } from "./TelemetrySummary";
 
 export type StrategyId = "rooftop_trap" | "the_choke" | "the_rush" | "the_bait" | "shortcut_snare" | "the_patient_wall";
 
 /** Where a helper cat should lie in wait along Past You's recorded path. */
 export interface Assignment {
-  cat: RivalId;
+  cat: CatId;
   role: "pressure" | "ambush" | "chaos";
   /** Zone ids to prefer for the ambush (in order). */
   zones: string[];
@@ -71,7 +71,7 @@ export function heuristicPlan(s: TelemetrySummary): TacticalPlan {
 }
 
 export function planFor(id: StrategyId, reasons: string[], source: "heuristic" | "llm", line?: string): TacticalPlan {
-  const A = (cat: RivalId, role: Assignment["role"], zones: string[], fallbackProgress: number): Assignment => ({ cat, role, zones, fallbackProgress });
+  const A = (cat: CatId, role: Assignment["role"], zones: string[], fallbackProgress: number): Assignment => ({ cat, role, zones, fallbackProgress });
   let assignments: Assignment[];
   let defaultLine: string;
   switch (id) {
@@ -105,3 +105,35 @@ export function planFor(id: StrategyId, reasons: string[], source: "heuristic" |
 }
 
 export const STRATEGY_IDS = Object.keys(NAMES) as StrategyId[];
+
+/** Which archetypes suit each role, best first. */
+const ROLE_AFFINITY: Record<Assignment["role"], Archetype[]> = {
+  pressure: ["sprinter", "opportunist", "chaos", "ambusher"],
+  ambush: ["ambusher", "opportunist", "sprinter", "chaos"],
+  chaos: ["chaos", "opportunist", "sprinter", "ambusher"],
+};
+
+/**
+ * Fit a plan's roles to the cats actually available (the thief and the
+ * human hunter are never helpers). Slots are filled in plan order: a cat
+ * the plan names keeps its slot, the rest go to the best-suited free cat.
+ */
+export function castAssignments(plan: TacticalPlan, available: readonly CatId[]): Assignment[] {
+  const free = [...available];
+  const out: Assignment[] = [];
+  const pending: Assignment[] = [];
+  for (const a of plan.assignments) {
+    const i = free.indexOf(a.cat);
+    if (i >= 0) {
+      out.push(a);
+      free.splice(i, 1);
+    } else pending.push(a);
+  }
+  for (const a of pending) {
+    if (free.length === 0) break;
+    const pick = ROLE_AFFINITY[a.role].map((arch) => free.find((id) => CATS[id].archetype === arch)).find((id) => id !== undefined) ?? free[0];
+    free.splice(free.indexOf(pick), 1);
+    out.push({ ...a, cat: pick });
+  }
+  return out;
+}

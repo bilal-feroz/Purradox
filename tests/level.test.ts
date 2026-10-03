@@ -14,7 +14,7 @@ describe("Sardine Street layout data", () => {
   });
 
   it("puts the start in the Fish Market and the goal on the Safe Rooftop", () => {
-    expect(zoneAt(...SPAWN.fishCat.pos)?.id).toBe("market");
+    expect(zoneAt(...SPAWN.runner.pos)?.id).toBe("market");
     expect(zoneAt(SPAWN.goal[0], SPAWN.goal[1] + 0.1, SPAWN.goal[2])?.index).toBe(8);
   });
 

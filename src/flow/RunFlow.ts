@@ -1,10 +1,11 @@
 import * as THREE from "three";
-import { RIVAL_IDS } from "../data/cats";
+import { CAT_IDS, CATS } from "../data/cats";
 import { SPAWN } from "../data/level";
 import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
 import { zoneAt } from "../level/Zones";
 import { recordEscape } from "../ui/records";
+import { ReplayRecorder } from "../replay/ReplayRecorder";
 
 const MENU_CAT = new THREE.Vector3(-18.6, 0, 13.4);
 /** Menu camera relative to the hero cat (cat sits right of frame). */
@@ -14,6 +15,15 @@ const MENU_LOOK = new THREE.Vector3(-1.75, 0.6, 0);
 const MENU_PIGEON_NDC = new THREE.Vector2(0.71, -0.8);
 /** Extra windup (s) on each rival's first pounce of Round 1. */
 const FIRST_POUNCE_BONUS = 0.3;
+/** Choose Your Thief line-up in the market, and its camera. */
+const THIEF_SPOTS: Array<[number, number, number]> = [
+  [-17.85, 0, 11.2],
+  [-16.35, 0, 11.0],
+  [-14.85, 0, 11.0],
+  [-13.35, 0, 11.2],
+];
+const THIEF_CAM = new THREE.Vector3(-15.6, 1.0, 15.3);
+const THIEF_LOOK = new THREE.Vector3(-15.6, 0.62, 11.0);
 const WATCH_SPOTS: Array<[number, number, number]> = [
   [50.6, 5.9, -61.2],
   [52.6, 5.9, -62.2],
@@ -29,6 +39,8 @@ export function registerRunFlow(g: Game): void {
   // ---------------------------------------------------------------- MENU
   g.fsm.register(GameState.MENU, {
     enter: () => {
+      // The home screen always stars Fish Cat; the thief is chosen later.
+      g.runnerId = "fishcat";
       g.resetWorld();
       g.round = 1;
       g.controlled = null;
@@ -67,8 +79,7 @@ export function registerRunFlow(g: Game): void {
         2,
       );
       if (!g.photoCamera) g.fishCat.lookTarget = g.camera.camera.position;
-      g.fishCat.updateScripted(dt);
-      for (const id of RIVAL_IDS) g.rivals[id].updateScripted(dt);
+      for (const c of g.cats) c.updateScripted(dt);
       g.fish.update(dt, [], g.time.realTime);
       g.pigeons.update(dt, []);
       g.camera.update(dt, null, null);
@@ -80,6 +91,69 @@ export function registerRunFlow(g: Game): void {
     },
   });
 
+  // ---------------------------------------------------------------- THIEF_SELECTION
+  // Unlocked after the first full cycle: any of the four cats may run
+  // Round 1. Rules are identical; what changes is who is chasing you.
+  g.fsm.register(GameState.THIEF_SELECTION, {
+    enter: () => {
+      t = 0;
+      g.setPaused(false);
+      g.results.show(null);
+      g.start.show(false);
+      g.hud.show(false);
+      g.input.exitPointerLock();
+      g.time.baseScale = 1;
+      g.controlled = null;
+      g.audio.setMusic("menu");
+      g.temporalVignette.classList.remove("show");
+      g.renderer.temporalUniforms.uEdge.value = 0;
+      g.renderer.temporalUniforms.uAmount.value = 0;
+      g.renderer.temporalUniforms.uFreeze.value = 0;
+      g.lighting.temporalBlend = 0;
+      g.resetWorld();
+      CAT_IDS.forEach((id, i) => {
+        const c = g.actors[id];
+        const s = THIEF_SPOTS[i];
+        c.mode = "scripted";
+        c.teleport(new THREE.Vector3(s[0], s[1], s[2]), 0);
+        c.setForcedAction("sit");
+        c.lookTarget = THIEF_CAM;
+      });
+      g.camera.setCinematic(THIEF_CAM, THIEF_LOOK, 3, true);
+      const focus = Math.max(0, CAT_IDS.indexOf(g.runnerId));
+      g.select.show(true, {
+        ids: [...CAT_IDS],
+        title: "CHOOSE YOUR THIEF",
+        sub: "ROUND 1 — YOUR THIEF BECOMES PAST YOU",
+        recap: "Every thief plays by the same rules. What changes is which three cats chase you.",
+        focus,
+        back: true,
+        card: (id) => ({
+          name: CATS[id].title,
+          role: `CHASED BY ${CAT_IDS.filter((o) => o !== id)
+            .map((o) => CATS[o].name.toUpperCase())
+            .join(" · ")}`,
+          blurb: CATS[id].thiefLine,
+        }),
+      });
+    },
+    update: (dt) => {
+      t += dt;
+      for (const c of g.cats) c.updateScripted(dt);
+      g.pigeons.update(dt, []);
+      g.fish.update(dt, [], g.time.realTime);
+      g.camera.setCinematic(new THREE.Vector3(THIEF_CAM.x + Math.sin(t * 0.3) * 0.25, THIEF_CAM.y, THIEF_CAM.z), THIEF_LOOK, 2);
+      g.camera.update(dt, null, null);
+    },
+    exit: () => {
+      g.select.show(false);
+      for (const c of g.cats) {
+        c.setForcedAction(null);
+        c.lookTarget = null;
+      }
+    },
+  });
+
   // ---------------------------------------------------------------- INTRO
   g.fsm.register(GameState.INTRO, {
     enter: () => {
@@ -88,9 +162,11 @@ export function registerRunFlow(g: Game): void {
       g.resetWorld();
       g.round = 1;
       // Each rival's first lunge is slower: an easy first "!" to hiss at.
-      for (const id of RIVAL_IDS) g.rivals[id].windupBonus = FIRST_POUNCE_BONUS;
-      g.controlled = g.fishCat;
-      g.fishCat.mode = "player";
+      for (const c of g.others()) c.windupBonus = FIRST_POUNCE_BONUS;
+      // Whoever runs Round 1 is the cat that will play Past You.
+      g.echo.bind(g.runner);
+      g.controlled = g.runner;
+      g.runner.mode = "player";
       g.hud.setRound(1);
       g.hud.clearAlerts();
       g.hud.show(true);
@@ -105,20 +181,19 @@ export function registerRunFlow(g: Game): void {
       g.renderer.temporalUniforms.uFreeze.value = 0;
       g.lighting.temporalBlend = 0;
       g.temporalVignette.classList.remove("show");
-      const p = g.fishCat.position;
+      const p = g.runner.position;
       g.camera.setCinematic(new THREE.Vector3(p.x - 6, p.y + 6, p.z + 7), new THREE.Vector3(p.x + 4, p.y, p.z), 2, true);
       g.huntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, echoPerfectHisses: 0 };
       t = 0;
     },
     update: (dt) => {
       t += dt;
-      const p = g.fishCat.position;
-      const yaw = g.fishCat.yaw;
+      const p = g.runner.position;
+      const yaw = g.runner.yaw;
       const behind = new THREE.Vector3(p.x - Math.sin(yaw) * 4.4, p.y + 1.7, p.z - Math.cos(yaw) * 4.4);
       g.camera.setCinematic(behind, new THREE.Vector3(p.x + Math.sin(yaw) * 2, p.y + 0.8, p.z + Math.cos(yaw) * 2), 3.2);
       g.camera.update(dt, null, null);
-      g.fishCat.updateScripted(dt);
-      for (const id of RIVAL_IDS) g.rivals[id].updateScripted(dt);
+      for (const c of g.cats) c.updateScripted(dt);
       g.fish.update(dt, [], g.time.simTime);
       g.pigeons.update(dt, []);
       g.updateHUD();
@@ -133,16 +208,18 @@ export function registerRunFlow(g: Game): void {
   // ---------------------------------------------------------------- FISH_RUN
   g.fsm.register(GameState.FISH_RUN, {
     enter: () => {
+      // Record whichever cat is the thief this run.
+      g.recorder = new ReplayRecorder(g.runnerId, 20);
       g.recorder.start();
       g.history.clear();
       g.telemetry.reset();
       g.runTime = 0;
       g.time.baseScale = 1;
-      g.camera.snapBehind(g.fishCat.yaw, g.fishCat.position.clone().setY(g.fishCat.position.y + 0.78));
+      g.camera.snapBehind(g.runner.yaw, g.runner.position.clone().setY(g.runner.position.y + 0.78));
       g.camera.pitch = 0.12;
       g.camera.distance = 3.7;
       g.input.requestPointerLock();
-      g.recorder.tick(0, () => g.snapshotFishCat(), true);
+      g.recorder.tick(0, () => g.snapshotRunner(), true);
       g.history.tick(0, true);
     },
     update: (realDt) => {
@@ -150,12 +227,12 @@ export function registerRunFlow(g: Game): void {
       if (dt > 0) {
         g.runTime += dt;
         g.simulate(dt, 1);
-        g.recorder.tick(g.runTime, () => g.snapshotFishCat());
+        g.recorder.tick(g.runTime, () => g.snapshotRunner());
         g.history.tick(g.runTime);
-        const a = g.fishCat;
+        const a = g.runner;
         const z = zoneAt(a.position.x, a.position.y, a.position.z);
         let threat = 99;
-        for (const id of RIVAL_IDS) threat = Math.min(threat, g.rivals[id].position.distanceTo(a.position));
+        for (const c of g.others()) threat = Math.min(threat, c.position.distanceTo(a.position));
         g.telemetry.sample(g.runTime, dt, a.position.x, a.position.y, a.position.z, z?.id ?? "", g.elevated(a), a.movement.sprinting, threat);
         if (z?.id === "safe" && g.fish.owner === a && a.grounded) g.fsm.transition(GameState.FISH_RUN_COMPLETE);
       }
@@ -167,14 +244,14 @@ export function registerRunFlow(g: Game): void {
   // ---------------------------------------------------------------- FISH_RUN_COMPLETE
   g.fsm.register(GameState.FISH_RUN_COMPLETE, {
     enter: () => {
-      g.replay = g.recorder.finish(g.runTime, () => g.snapshotFishCat(), true);
+      g.replay = g.recorder.finish(g.runTime, () => g.snapshotRunner(), true);
       g.history.tick(g.runTime, true);
       recordEscape(g.runTime);
       // Ask the Tactical Director now, while the end-of-run beats play.
       g.plan = null;
       g.planRequest = g.director.analyze(g.telemetry.summary());
-      g.fishCat.setForcedAction("victory");
-      g.fishCat.meow();
+      g.runner.setForcedAction("victory");
+      g.runner.meow();
       g.audio.play("victory", { volume: 0.55 });
       g.audio.duckMusic(6);
       g.time.slowMo(0.9, 0.5);
@@ -188,8 +265,8 @@ export function registerRunFlow(g: Game): void {
       const dt = g.time.simDt;
       if (t < 0.9) {
         // the victory sit plays out while time slows
-        g.fishCat.updateScripted(dt);
-        for (const id of RIVAL_IDS) g.rivals[id].update(dt);
+        g.runner.updateScripted(dt);
+        for (const c of g.others()) c.update(dt);
         g.fish.update(dt, [], g.time.simTime);
         g.pigeons.update(dt, []);
         g.updateFollowCamera(realDt);
@@ -211,23 +288,22 @@ export function registerRunFlow(g: Game): void {
         stampStage = 3;
         g.stamps.clear(false);
         // Cut to the watchers on the final-climb roof.
-        RIVAL_IDS.forEach((id, i) => {
-          const r = g.rivals[id];
+        g.others().forEach((r, i) => {
           const s = WATCH_SPOTS[i];
           r.teleport(new THREE.Vector3(s[0], s[1], s[2]), Math.PI);
           r.setForcedAction("sit");
-          r.lookTarget = g.fishCat.center();
+          r.lookTarget = g.runner.center();
         });
-        const fc = g.fishCat.position;
+        const fc = g.runner.position;
         g.camera.setCinematic(new THREE.Vector3(52.6, 7.25, -57.2), new THREE.Vector3(fc.x, fc.y + 0.6, fc.z), 3, true);
         g.stamps.place("low");
         g.stamps.show("BUT SOMEONE ELSE", "watching", true);
         g.stamps.show("WAS WATCHING.", "watching", true);
         g.audio.play("stamp", { volume: 0.5 });
-        g.rivals.soot.meow();
+        g.others()[1]?.meow();
       }
       if (stampStage >= 3) {
-        for (const id of RIVAL_IDS) g.rivals[id].updateScripted(realDt);
+        for (const c of g.others()) c.updateScripted(realDt);
         g.camera.update(realDt, null, null);
       } else if (t >= 0.9) {
         g.camera.update(realDt, null, null);

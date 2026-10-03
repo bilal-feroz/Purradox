@@ -5,6 +5,8 @@
 export enum GameState {
   BOOT = "BOOT",
   MENU = "MENU",
+  /** Choose Your Thief (unlocked after the first full cycle). */
+  THIEF_SELECTION = "THIEF_SELECTION",
   INTRO = "INTRO",
   FISH_RUN = "FISH_RUN",
   FISH_RUN_COMPLETE = "FISH_RUN_COMPLETE",
@@ -18,7 +20,8 @@ export enum GameState {
 
 export const TRANSITIONS: Record<GameState, readonly GameState[]> = {
   [GameState.BOOT]: [GameState.MENU],
-  [GameState.MENU]: [GameState.INTRO],
+  [GameState.MENU]: [GameState.INTRO, GameState.THIEF_SELECTION],
+  [GameState.THIEF_SELECTION]: [GameState.INTRO, GameState.MENU],
   [GameState.INTRO]: [GameState.FISH_RUN, GameState.MENU],
   [GameState.FISH_RUN]: [GameState.FISH_RUN_COMPLETE, GameState.INTRO, GameState.MENU],
   [GameState.FISH_RUN_COMPLETE]: [GameState.ANALYZE_RUN],
@@ -27,7 +30,7 @@ export const TRANSITIONS: Record<GameState, readonly GameState[]> = {
   [GameState.CAT_SELECTION]: [GameState.HUNT, GameState.MENU],
   [GameState.HUNT]: [GameState.HUNT_COMPLETE, GameState.REWIND, GameState.INTRO, GameState.MENU],
   [GameState.HUNT_COMPLETE]: [GameState.RESULTS],
-  [GameState.RESULTS]: [GameState.REWIND, GameState.INTRO, GameState.MENU],
+  [GameState.RESULTS]: [GameState.REWIND, GameState.INTRO, GameState.MENU, GameState.THIEF_SELECTION],
 };
 
 export interface StateHandlers {

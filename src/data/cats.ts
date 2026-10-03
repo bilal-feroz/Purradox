@@ -4,7 +4,13 @@
 
 export type CatId = "fishcat" | "mochi" | "soot" | "beans";
 export type RivalId = Exclude<CatId, "fishcat">;
+/** All four cats, in menu order. Any of them can be the Round 1 thief. */
+export const CAT_IDS: readonly CatId[] = ["fishcat", "mochi", "soot", "beans"];
+/** The original trio that hunts Fish Cat on a first playthrough. */
 export const RIVAL_IDS: readonly RivalId[] = ["mochi", "soot", "beans"];
+
+/** How a cat behaves when the game (not the player) controls it. */
+export type Archetype = "sprinter" | "ambusher" | "chaos" | "opportunist";
 
 export type CatPattern = "fishcat" | "calico" | "smoky" | "tabby";
 
@@ -56,8 +62,15 @@ export interface CatDef {
   id: CatId;
   name: string;
   title: string;
+  /** Round 2 hunter role (where this cat starts the hunt). */
   role: string;
+  /** Round 2 hunter card text. */
   blurb: string;
+  /** AI personality when the game controls this cat. */
+  archetype: Archetype;
+  aiTitle: string;
+  /** Choose Your Thief card line (cosmetic only: all thieves play the same). */
+  thiefLine: string;
   pattern: CatPattern;
   colors: CatColors;
   proportions: CatProportions;
@@ -79,13 +92,22 @@ const BASE_STATS: CatStats = {
   hitRadius: 0.78,
 };
 
+/**
+ * Every player-controlled cat uses these exact rules (Round 1 thief and
+ * Round 2 hunter alike). Per-cat stats below only flavor AI behavior.
+ */
+export const PLAYER_STATS: Readonly<CatStats> = Object.freeze({ ...BASE_STATS });
+
 export const CATS: Record<CatId, CatDef> = {
   fishcat: {
     id: "fishcat",
     name: "Fish Cat",
     title: "FISH CAT",
-    role: "The Thief",
-    blurb: "Compact, quick and absolutely not giving that fish back.",
+    role: "Route Cutter",
+    blurb: "The opportunist. Starts between both routes and cuts Past You off.",
+    archetype: "opportunist",
+    aiTitle: "THE OPPORTUNIST",
+    thiefLine: "The original thief. Compact, quick, not giving that fish back.",
     pattern: "fishcat",
     colors: {
       main: 0xe07b39,
@@ -122,6 +144,9 @@ export const CATS: Record<CatId, CatDef> = {
     title: "MOCHI",
     role: "Early Pressure",
     blurb: "The sprinter. Fast, direct, pounces first and thinks later.",
+    archetype: "sprinter",
+    aiTitle: "THE SPRINTER",
+    thiefLine: "Long legs, big ears, zero patience.",
     pattern: "calico",
     colors: {
       main: 0xe57f3b,
@@ -164,6 +189,9 @@ export const CATS: Record<CatId, CatDef> = {
     title: "SOOT",
     role: "Mid-Route Ambush",
     blurb: "The ambusher. Low, patient, always waiting where you land.",
+    archetype: "ambusher",
+    aiTitle: "THE AMBUSHER",
+    thiefLine: "Low, quiet, and mostly shadow.",
     pattern: "smoky",
     colors: {
       main: 0x3e3a39,
@@ -208,6 +236,9 @@ export const CATS: Record<CatId, CatDef> = {
     title: "BEANS",
     role: "Rooftop Chaos",
     blurb: "The chaos cat. Tiny, springy, and sure that everything is a toy.",
+    archetype: "chaos",
+    aiTitle: "THE CHAOS CAT",
+    thiefLine: "Tiny, springy, and sure the fish is a toy.",
     pattern: "tabby",
     colors: {
       main: 0x837b76,
