@@ -16,14 +16,14 @@ export const FACE_YAW: Record<Face, number> = { s: 0, n: Math.PI, e: Math.PI / 2
 const rng = new Random(4242);
 
 /** Transform a local offset (lx, lz) by a yaw. */
-function rot(lx: number, lz: number, yaw: number): [number, number] {
+export function rot(lx: number, lz: number, yaw: number): [number, number] {
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   return [lx * c + lz * s, -lx * s + lz * c];
 }
 
 /** Build a local group of geometries then place it with one yaw. */
-function group(b: LevelBuilder, parts: THREE.BufferGeometry[], x: number, y: number, z: number, yaw: number, bucket: "world" | "glow" = "world"): void {
+export function group(b: LevelBuilder, parts: THREE.BufferGeometry[], x: number, y: number, z: number, yaw: number, bucket: "world" | "glow" = "world"): void {
   if (parts.length === 0) return;
   const g = merge(parts);
   place(g, x, y, z, yaw);

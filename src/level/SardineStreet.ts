@@ -6,6 +6,7 @@ import { archFrame, box, flatPoly, lowPoly, place, shade, type ColorFn } from ".
 import type { Materials } from "../rendering/Materials";
 import type { PhysicsWorld } from "../physics/PhysicsWorld";
 import { LevelBuilder } from "./LevelBuilder";
+import { dressSardineStreet } from "./Dressing";
 import * as P from "./Props";
 import type { Face, ShutterColor } from "./Props";
 
@@ -530,6 +531,10 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
     }
     return best;
   };
+
+  // extra set dressing from the reference sheets (after everything else, so
+  // the street above keeps exactly the layout it had)
+  dressSardineStreet(b);
 
   b.finalize(scene, mats);
   return { builder: b, shoreDistance };
