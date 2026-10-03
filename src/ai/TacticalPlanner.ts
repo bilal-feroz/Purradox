@@ -6,6 +6,7 @@
 import { CATS, type CatId } from "../data/cats";
 import { SPAWN, ZONES, type V3 } from "../data/level";
 import type { WaypointGraph } from "../level/WaypointGraph";
+import type { AlleyHabit } from "./AlleyMemory";
 import type { BehaviorFingerprint, BehaviorTag } from "./BehaviorProfiler";
 import {
   HABIT_COUNTERS,
@@ -64,6 +65,8 @@ export interface CouncilPlan {
   source: "counterfactual" | "llm";
   /** Optional council flavor line (LLM explanation layer only). */
   taunt?: string;
+  /** A habit the Alley Memory saw across recent runs (stretch feature). */
+  memory?: AlleyHabit | null;
 }
 
 const PROP_NAMES: Record<string, string> = {

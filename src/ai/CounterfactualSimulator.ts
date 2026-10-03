@@ -16,6 +16,7 @@ import type { NavNode, WaypointGraph } from "../level/WaypointGraph";
 import { zoneAt } from "../level/Zones";
 import type { ReplayData } from "../replay/ReplayTypes";
 import { deriveTags, type BehaviorFingerprint, type BehaviorTag } from "./BehaviorProfiler";
+import { MEMORY_BONUS } from "./AlleyMemory";
 
 export type RoleId = "early_pressure" | "cut_off" | "hold_landing" | "environment_trap" | "late_collapse";
 
@@ -126,6 +127,8 @@ export interface CandidateBreakdown {
   prior: number;
   /** Counters the human's most distinctive habit (see HABIT_COUNTERS). */
   habitFocus: number;
+  /** Counters a habit the Alley Memory saw three runs in a row. */
+  memoryBonus: number;
   unfairnessPenalty: number;
   travelImpossibility: number;
   duplicateRolePenalty: number;
@@ -378,6 +381,8 @@ export function simulateCounterfactuals(
   agents: AgentSpec[],
   fp: BehaviorFingerprint | null,
   only?: CounterId,
+  /** Strategy answering a habit the Alley Memory remembers (small bonus). */
+  memory?: CounterId | null,
 ): SimResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   // travel-time cache: (cat, node) -> { time, length }
@@ -413,7 +418,7 @@ export function simulateCounterfactuals(
       for (;;) {
         const picks = slots.map((_, i) => choices[i][idx[i]]).filter((p): p is NodePass => p !== undefined);
         if (picks.length === slots.length) {
-          const cand = evaluate(tpl, slots, perm, picks, trace, travel, prior, tpl.id === focusId ? HABIT_FOCUS : 0);
+          const cand = evaluate(tpl, slots, perm, picks, trace, travel, prior, tpl.id === focusId ? HABIT_FOCUS : 0, tpl.id === memory ? MEMORY_BONUS : 0);
           evaluated++;
           const cur = bestPer.get(tpl.id);
           if (!cur || cand.score > cur.score) bestPer.set(tpl.id, cand);
@@ -445,6 +450,7 @@ function evaluate(
   travel: (a: AgentSpec, n: NavNode, spot?: V3) => { time: number; len: number },
   prior: number,
   focus: number,
+  remembered: number,
 ): Candidate {
   const assignments: PlannedAssignment[] = [];
   let iq = 0;
@@ -512,6 +518,7 @@ function evaluate(
     diversity: (zones / n) * 0.2,
     prior,
     habitFocus: focus,
+    memoryBonus: remembered,
     unfairnessPenalty: unfair,
     travelImpossibility: impossible,
     duplicateRolePenalty: duplicate,
@@ -524,7 +531,8 @@ function evaluate(
     breakdown.fishDrop +
     breakdown.diversity +
     breakdown.prior +
-    breakdown.habitFocus -
+    breakdown.habitFocus +
+    breakdown.memoryBonus -
     breakdown.unfairnessPenalty -
     breakdown.travelImpossibility -
     breakdown.duplicateRolePenalty;
@@ -562,7 +570,7 @@ function emptyCandidate(): Candidate {
     name: COUNTER_NAMES.the_choke,
     assignments: [],
     score: -Infinity,
-    breakdown: { interceptQuality: 0, coverage: 0, routeAdvantage: 0, roleSynergy: 0, fishDrop: 0, diversity: 0, prior: 0, habitFocus: 0, unfairnessPenalty: 0, travelImpossibility: 0, duplicateRolePenalty: 0 },
+    breakdown: { interceptQuality: 0, coverage: 0, routeAdvantage: 0, roleSynergy: 0, fishDrop: 0, diversity: 0, prior: 0, habitFocus: 0, memoryBonus: 0, unfairnessPenalty: 0, travelImpossibility: 0, duplicateRolePenalty: 0 },
     windows: 0,
     earliest: Infinity,
     coverage: 0,

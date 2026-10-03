@@ -101,6 +101,7 @@ export class CouncilMap {
         <div class="cm-rows">
           ${profile ? `<div class="cm-row"><span>PLAYER PROFILE</span><b>${profile.title}</b></div><div class="cm-detail">${profile.detail}</div>` : ""}
           <div class="cm-row plan"><span>COUNTER-PLAN</span><b>${plan.strategyName}</b></div>
+          ${plan.memory ? `<div class="cm-row memory"><span>ALLEY MEMORY</span></div><div class="cm-detail">${plan.memory.line}</div>` : ""}
         </div>
       </div>`;
     this.root.classList.remove("show", "known");

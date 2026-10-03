@@ -67,7 +67,7 @@ export interface HuntStats {
 const SETTINGS_KEY = "purradox.settings.v1";
 
 function loadSettings(): Settings {
-  const def: Settings = { volume: 0.8, music: 0.55, sensitivity: 1, invertY: false };
+  const def: Settings = { volume: 0.8, music: 0.55, sensitivity: 1, invertY: false, alleyMemory: true };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) return { ...def, ...(JSON.parse(raw) as Partial<Settings>) };

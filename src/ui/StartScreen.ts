@@ -10,6 +10,8 @@ export interface Settings {
   music: number;
   sensitivity: number;
   invertY: boolean;
+  /** The council remembers your last few runs (this browser only). */
+  alleyMemory: boolean;
 }
 
 const CONTROLS: Array<[string, string]> = [
@@ -85,7 +87,8 @@ export class StartScreen {
       <label>Volume <input type="range" min="0" max="1" step="0.05" data-s="volume"></label>
       <label>Music <input type="range" min="0" max="1" step="0.05" data-s="music"></label>
       <label>Mouse sensitivity <input type="range" min="0.3" max="2.5" step="0.05" data-s="sensitivity"></label>
-      <label>Invert Y <input type="checkbox" data-s="invertY"></label>`;
+      <label>Invert Y <input type="checkbox" data-s="invertY"></label>
+      <label title="The Alley Council remembers your last 5 runs in this browser and notices habits you repeat.">Alley Memory <input type="checkbox" data-s="alleyMemory"></label>`;
     this.root.appendChild(this.panel);
 
     this.levels = el("div", "level-panel interactive");

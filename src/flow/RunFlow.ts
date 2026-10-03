@@ -7,6 +7,7 @@ import { zoneAt } from "../level/Zones";
 import { recordEscape } from "../ui/records";
 import { ReplayRecorder } from "../replay/ReplayRecorder";
 import { deriveTags, fingerprint } from "../ai/BehaviorProfiler";
+import { loadMemory, memoryEntry, recallHabit, remember, saveMemory } from "../ai/AlleyMemory";
 import { analyzeTrace, simulateCounterfactuals } from "../ai/CounterfactualSimulator";
 import { buildRequest } from "../ai/TacticalDirector";
 import { agentFor, planCouncil } from "../ai/TacticalPlanner";
@@ -415,9 +416,17 @@ export function registerRunFlow(g: Game): void {
       g.debug?.log(`profile: ${g.profileTags.map((tg) => tg.title).join(", ")}`);
       // Counterfactual simulation: fast-forward many council plans against
       // the recorded run, then let the planner pick and explain one.
+      // Alley Memory (optional): a habit seen three runs in a row tips the
+      // council toward the plan that answers it.
+      const entry = memoryEntry(g.runnerId, summary, g.fingerprint, g.profileTags);
+      const history = g.settings.alleyMemory ? loadMemory() : [];
+      const habit = g.settings.alleyMemory ? recallHabit(history, entry) : null;
       g.trace = analyzeTrace(g.replay, g.graph);
-      g.sim = simulateCounterfactuals(g.trace, g.graph, g.otherIds().map(agentFor), g.fingerprint);
+      g.sim = simulateCounterfactuals(g.trace, g.graph, g.otherIds().map(agentFor), g.fingerprint, undefined, habit?.counter);
       g.plan = planCouncil(g.sim, g.fingerprint, g.profileTags);
+      g.plan.memory = habit;
+      if (g.settings.alleyMemory) saveMemory(remember(history, { ...entry, strategy: g.plan.strategyId }));
+      if (habit) g.debug?.log(`alley memory: ${habit.line} (+ ${habit.counter})`);
       g.debug?.log(`council: ${g.plan.strategyName} — ${g.sim.evaluated} plans simulated in ${g.sim.ms.toFixed(0)} ms`);
       // Optional LLM explanation layer (renames/explains only; may time out).
       g.planRequest = g.director.explain(g.plan, buildRequest(g.plan, g.fingerprint, g.profileTags, summary));

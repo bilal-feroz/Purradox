@@ -171,19 +171,20 @@ export class AiDebugPanel {
         <span>hesitation</span><b>${f(fp.hesitationTime, 1)} s</b>
         <span>backtracks</span><b>${fp.counts.backtracks}</b>
       </div>
-      <div class="ad-tags">${tags || "no strong tags"}</div>`;
+      <div class="ad-tags">${tags || "no strong tags"}</div>
+      <div class="ad-why">ALLEY MEMORY: ${plan.memory ? `${esc(plan.memory.line)} → ${plan.memory.counter}` : g.settings.alleyMemory ? "no habit repeated 3 runs in a row yet" : "off"}</div>`;
     const zones = g.runSummary ? `<h4>2 · RECORDED ZONE TIMINGS</h4>${zoneTable(g.runSummary)}` : "";
     const cands = sim.top
       .map((c, i) => {
         const b = c.breakdown;
         const pen = b.unfairnessPenalty + b.travelImpossibility + b.duplicateRolePenalty;
-        return `<tr class="${c.id === plan.strategyId ? "sel" : ""}"><td>${i + 1}</td><td>${c.name}</td><td>${f(c.score, 3)}</td><td>${f(b.interceptQuality)}</td><td>${f(b.coverage)}</td><td>${f(b.routeAdvantage)}</td><td>${f(b.roleSynergy)}</td><td>${f(b.prior + b.habitFocus)}${b.habitFocus > 0 ? "★" : ""}</td><td>${pen > 0 ? "−" + f(pen) : "0"}</td><td>${c.windows}</td><td>${Number.isFinite(c.earliest) ? f(c.earliest, 1) + "s" : "—"}</td></tr>`;
+        return `<tr class="${c.id === plan.strategyId ? "sel" : ""}"><td>${i + 1}</td><td>${c.name}</td><td>${f(c.score, 3)}</td><td>${f(b.interceptQuality)}</td><td>${f(b.coverage)}</td><td>${f(b.routeAdvantage)}</td><td>${f(b.roleSynergy)}</td><td>${f(b.prior + b.habitFocus + b.memoryBonus)}${b.habitFocus > 0 ? "★" : ""}${b.memoryBonus > 0 ? "◆" : ""}</td><td>${pen > 0 ? "−" + f(pen) : "0"}</td><td>${c.windows}</td><td>${Number.isFinite(c.earliest) ? f(c.earliest, 1) + "s" : "—"}</td></tr>`;
       })
       .join("");
     const candidates = `
       <h4>3 · COUNTERFACTUAL SIMULATION <span>${sim.evaluated} plans · ${f(sim.ms, 0)} ms · best of each strategy</span></h4>
       <table class="ad-t"><tr><th>#</th><th>strategy</th><th>score</th><th>IQ</th><th>cov</th><th>adv</th><th>syn</th><th>prior</th><th>pen</th><th>win</th><th>first</th></tr>${cands}</table>
-      <div class="ad-note">IQ intercept quality · cov time covered · adv route advantage · syn role fit · prior fingerprint fit (★ +${f(0.2, 1)}: counters your most distinctive habit) · pen fairness / feasibility penalties · win viable intercepts</div>`;
+      <div class="ad-note">IQ intercept quality · cov time covered · adv route advantage · syn role fit · prior fingerprint fit (★ +${f(0.2, 1)}: counters your most distinctive habit · ◆ +0.12: Alley Memory) · pen fairness / feasibility penalties · win viable intercepts</div>`;
     const llm = g.director.enabled ? (plan.source === "llm" ? "LLM explanation applied" : "LLM explanation pending / unused") : "LLM layer off";
     const selected = `
       <h4>4 · SELECTED STRATEGY</h4>
