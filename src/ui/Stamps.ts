@@ -29,9 +29,10 @@ export class Stamps {
   }
 
   /** Vertical placement for the next stamps. */
-  place(where: "center" | "low" | "high"): void {
+  place(where: "center" | "low" | "high" | "left"): void {
     this.root.classList.toggle("low", where === "low");
     this.root.classList.toggle("high", where === "high");
+    this.root.classList.toggle("left", where === "left");
   }
 
   clear(animated = true): void {

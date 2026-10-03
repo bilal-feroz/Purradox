@@ -36,6 +36,7 @@ import { ReplayRecorder } from "../replay/ReplayRecorder";
 import { emptySample, type ReplayData, type ReplaySnapshot } from "../replay/ReplayTypes";
 import { WorldHistory, type Rewindable } from "../replay/WorldHistory";
 import { CatSelect } from "../ui/CatSelect";
+import { CouncilMap } from "../ui/CouncilMap";
 import { HUD } from "../ui/HUD";
 import { PauseMenu } from "../ui/PauseMenu";
 import { Results } from "../ui/Results";
@@ -125,6 +126,7 @@ export class Game {
   readonly select: CatSelect;
   readonly results: Results;
   readonly stamps: Stamps;
+  readonly councilMap: CouncilMap;
   readonly pause: PauseMenu;
   readonly fadeEl: HTMLDivElement;
   readonly temporalVignette: HTMLDivElement;
@@ -200,6 +202,7 @@ export class Game {
     this.select = new CatSelect(uiRoot);
     this.results = new Results(uiRoot);
     this.stamps = new Stamps(uiRoot);
+    this.councilMap = new CouncilMap(uiRoot);
     this.pause = new PauseMenu(uiRoot);
     this.temporalVignette = document.createElement("div");
     this.temporalVignette.className = "vignette-temporal";

@@ -19,7 +19,7 @@ const REWIND_SECONDS = 3.2;
 export function registerTransitionFlow(g: Game): void {
   let t = 0;
   let planShown = false;
-  let profileShown = false;
+  let knownShown = false;
   let resolved: CouncilPlan | null = null;
   let streak: THREE.Mesh | null = null;
   let streakCount = 0;
@@ -29,21 +29,26 @@ export function registerTransitionFlow(g: Game): void {
   let done = false;
 
   // ---------------------------------------------------------------- ANALYZE_RUN
+  // THE ALLEY COUNCIL IS PLOTTING… → council map (your route, cats racing to
+  // their simulated intercepts, your profile) → COUNTER-PLAN → THEY KNOW YOUR
+  // ROUTE. About 4.7 s, then the rewind.
   g.fsm.register(GameState.ANALYZE_RUN, {
     enter: () => {
       t = 0;
       planShown = false;
-      profileShown = false;
+      knownShown = false;
       resolved = null;
-      // The plan was computed when the run ended; the optional explanation
-      // layer may still be rewording it.
+      // the plan was simulated when the run ended; an optional explanation
+      // layer may still be rewording it
       g.planRequest?.then((p) => {
         resolved = p;
+        if (p !== g.plan) g.councilMap.setPlanName(p.strategyName);
       });
-      g.stamps.place("high");
+      g.stamps.place("left");
       g.stamps.show("THE ALLEY COUNCIL", "council", true);
       g.stamps.show("IS PLOTTING…", "council", true);
       g.audio.play("stamp", { volume: 0.45 });
+      if (g.plan) g.councilMap.show(g.plan, g.replay);
       // huddle: the three other cats gather in a little circle and plot
       const council = g.others();
       const center = new THREE.Vector3();
@@ -56,7 +61,8 @@ export function registerTransitionFlow(g: Game): void {
         r.setForcedAction("sit");
         r.lookTarget = center.clone().setY(center.y + 0.45);
       });
-      g.camera.setCinematic(new THREE.Vector3(center.x + 1.6, center.y + 2.3, center.z + 3.6), center.clone().setY(center.y + 0.35), 1.6);
+      // frame the huddle left of centre; the council map owns the right
+      g.camera.setCinematic(new THREE.Vector3(center.x + 1.6, center.y + 2.3, center.z + 3.6), new THREE.Vector3(center.x + 1.35, center.y + 0.95, center.z - 0.2), 1.6);
     },
     update: (dt) => {
       t += dt;
@@ -65,31 +71,32 @@ export function registerTransitionFlow(g: Game): void {
         r.updateScripted(dt);
       }
       g.camera.update(dt, null, null);
-      // One behavior insight first: what the council noticed about you.
-      const tag = g.profileTags[0];
-      if (tag && !profileShown && t > 1.2) {
-        profileShown = true;
-        g.stamps.clear(false);
-        g.stamps.show("PLAYER PROFILE", "council", true);
-        g.stamps.show(tag.title, "strategy", false, tag.detail);
-        g.audio.play("stamp", { volume: 0.5 });
-      }
-      const planAt = tag ? 2.9 : 1.3;
-      // the deterministic plan is always ready; an explanation layer gets a beat longer
-      if (!resolved && g.plan && t > planAt + (g.director.enabled ? 1.2 : 0)) resolved = g.plan;
-      if (resolved && !planShown && t > planAt) {
+      if (!planShown && t > 2.5) {
         planShown = true;
-        g.plan = resolved;
-        g.stamps.clear(false);
-        g.stamps.show(resolved.strategyName, "strategy", false, resolved.callout);
-        g.audio.play("stamp", { volume: 0.6 });
-        g.debug?.log(`plan (${resolved.source}): ${resolved.strategyName} — ${resolved.reason}`);
-        t = planAt;
+        const plan = resolved ?? g.plan;
+        if (plan) {
+          g.plan = plan;
+          g.stamps.clear(false);
+          g.stamps.show("COUNTER-PLAN", "council", true);
+          g.stamps.show(plan.strategyName, "strategy", false, plan.callout);
+          g.audio.play("stamp", { volume: 0.6 });
+          g.debug?.log(`plan (${plan.source}): ${plan.strategyName} — ${plan.reason}`);
+        }
       }
-      if (planShown && t > planAt + 1.9) g.fsm.transition(GameState.REWIND);
+      if (planShown && !knownShown && t > 3.6) {
+        knownShown = true;
+        g.stamps.clear(false);
+        g.stamps.show("THEY KNOW", "watching", true);
+        g.stamps.show("YOUR ROUTE.", "watching", true);
+        g.councilMap.markKnown();
+        g.audio.play("tell", { volume: 0.45 });
+        g.audio.play("stamp", { volume: 0.55 });
+      }
+      if (knownShown && t > 4.7) g.fsm.transition(GameState.REWIND);
     },
     exit: () => {
       g.stamps.clear();
+      g.councilMap.hide();
       for (const c of g.others()) c.lookTarget = null;
     },
   });

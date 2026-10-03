@@ -359,6 +359,7 @@ export function registerRunFlow(g: Game): void {
   // stamps default to center placement whenever a new flow phase begins
   g.fsm.onChange((to) => {
     if (to !== GameState.FISH_RUN_COMPLETE && to !== GameState.ANALYZE_RUN) g.stamps.place("center");
+    if (to !== GameState.ANALYZE_RUN) g.councilMap.hide();
   });
 
   void SPAWN;
