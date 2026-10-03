@@ -35,6 +35,8 @@ Fish Cat replaying your exact run, with the same route, jumps, pounces and hisse
 
 Pounce beats bad positioning. Hiss beats a predictable pounce. Waiting beats a premature hiss.
 
+Whoever is holding the fish (a thief, or Past You in Round 2) wears a bobbing fish marker; when they leave the screen it pins to the edge with an arrow pointing at them.
+
 ## Run it
 
 ```bash

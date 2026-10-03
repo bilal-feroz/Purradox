@@ -54,6 +54,7 @@ TypeScript · Vite · Three.js (WebGL2) · Rapier 3D (WASM kinematic character c
 
 - **Your first run creates your second opponent.** The challenge of Round 2 is literally your own play.
 - The "wait… *that hiss was recorded*" moment: your past self counters you with a move you made a minute ago.
+- Readable combat: rivals flash a yellow **!** before every lunge (hiss on it for a Perfect Hiss), and a fish marker with an off-screen arrow always shows who holds the fish.
 - A replay system that is the core mechanic itself, not just a ghost or a spectator feature, with determinism tested in CI.
 - A polished, cohesive art style (procedural low-poly Mediterranean diorama) running at 60 FPS in a browser with no installs.
 
