@@ -205,6 +205,14 @@ export class HUD {
     a.active = active;
   }
 
+  /** Brief glow on an ability button ("use this now"). */
+  cue(which: "pounce" | "hiss" | "scent"): void {
+    const r = this.abilities[which].root;
+    r.classList.remove("cue");
+    void r.offsetWidth;
+    r.classList.add("cue");
+  }
+
   setPrompt(text: string | null): void {
     if (text) this.promptText.textContent = text;
     this.prompt.classList.toggle("hide", !text);

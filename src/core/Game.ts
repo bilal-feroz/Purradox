@@ -330,6 +330,8 @@ export class Game {
       if (!cat) return;
       this.effects.exclaim(cat.position);
       this.effects.ring(new THREE.Vector3(e.x, e.y + 0.04, e.z), 0.9, 0xf7cf55, 0.3);
+      const me = this.controlled;
+      if (me && me.team !== cat.team && me.abilities.hissReady && me.position.distanceTo(cat.position) < 6) this.hud.cue("hiss");
     });
     this.bus.on("hissStart", (e) => {
       if (e.cat === "fishcat" && isRunRecording()) {

@@ -20,7 +20,14 @@ async function main(): Promise<void> {
   const boot = document.getElementById("boot-screen") as HTMLDivElement;
   const fill = boot.querySelector(".boot-fill") as HTMLDivElement;
   const label = boot.querySelector(".boot-label") as HTMLDivElement;
-  const game = new Game(canvas, ui);
+  let game: Game;
+  try {
+    game = new Game(canvas, ui);
+  } catch (err) {
+    console.error(err);
+    label.textContent = "PURRADOX needs WebGL. Try a recent Chrome, Edge or Firefox with hardware acceleration enabled.";
+    return;
+  }
   window.__purradox = game;
   try {
     await game.boot((p, text) => {
@@ -47,10 +54,17 @@ async function main(): Promise<void> {
     (window as unknown as { __test: unknown }).__test = new TestHarness(game, ap);
   }
   if (params.get("autopause") === "0") game.autoPause = false;
+  let frameErrors = 0;
   const loop = (now: number) => {
-    // Automated tests can take over the clock (manual stepping).
-    if (!game.manualStepping) game.frame(now);
     requestAnimationFrame(loop);
+    // Automated tests can take over the clock (manual stepping).
+    if (game.manualStepping) return;
+    try {
+      game.frame(now);
+    } catch (err) {
+      // Keep the loop alive; report the first few failures only.
+      if (frameErrors++ < 5) console.error(err);
+    }
   };
   requestAnimationFrame(loop);
 }
