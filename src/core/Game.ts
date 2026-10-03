@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { CAT_IDS, CATS, type CatId } from "../data/cats";
-import { H, SPAWN, ZONES } from "../data/level";
+import { H, rivalPost, SPAWN, ZONES } from "../data/level";
 import { PALETTE } from "../data/palette";
 import { AudioManager } from "../audio/AudioManager";
 import { TacticalDirector, HttpStrategyProvider } from "../ai/TacticalDirector";
@@ -318,7 +318,8 @@ export class Game {
 
   private registerResettables(): void {
     this.resets.add("fish", () => this.fish.reset());
-    // The thief starts at the market; everyone else takes their AI post.
+    // The thief starts at the market; everyone else takes their AI post
+    // (Fish Cat stands in at the post of whichever cat is the thief).
     this.resets.add("cats", () => {
       for (const c of this.cats) {
         c.resetStatus();
@@ -332,6 +333,8 @@ export class Game {
           c.teleport(new THREE.Vector3(...SPAWN.runner.pos), SPAWN.runner.yaw);
         } else {
           c.mode = "ai";
+          const post = rivalPost(c.id, this.runnerId);
+          this.brains[c.id].setPost(post, CATS[post.slot].archetype);
           this.brains[c.id].reset();
         }
       }

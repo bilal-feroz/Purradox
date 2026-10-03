@@ -80,6 +80,8 @@ export function registerHuntFlow(g: Game): void {
       for (const ally of allies) {
         const brain = g.brains[ally.id];
         brain.enabled = true;
+        // Round 2 allies are themselves again (Round 1 stand-ins borrow a role)
+        brain.setArchetype(CATS[ally.id].archetype);
         const s = SPAWN.hunters[ally.id];
         ally.teleport(new THREE.Vector3(...s.pos), s.yaw);
         ally.setForcedAction(null);

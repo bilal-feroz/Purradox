@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ESCAPE_POINTS, NAV_EDGES, NAV_NODES, SPAWN, ZONES } from "../src/data/level";
+import { CAT_IDS } from "../src/data/cats";
+import { ESCAPE_POINTS, NAV_EDGES, NAV_NODES, rivalPost, SPAWN, ZONES } from "../src/data/level";
 import { WaypointGraph } from "../src/level/WaypointGraph";
 import { isElevated, zoneAt } from "../src/level/Zones";
 
@@ -22,6 +23,18 @@ describe("Sardine Street layout data", () => {
     for (const e of ESCAPE_POINTS) expect(zoneAt(...e.pos), e.id).toBeTruthy();
     for (const p of Object.values(SPAWN.ai)) expect(zoneAt(...p.pos)).toBeTruthy();
     for (const p of Object.values(SPAWN.hunters)) expect(zoneAt(...p.pos)).toBeTruthy();
+  });
+
+  it("every thief meets a cat at the same three Round 1 posts", () => {
+    const key = (p: { pos: [number, number, number] }) => p.pos.join(",");
+    const original = new Set(["mochi", "soot", "beans"].map((id) => key(SPAWN.ai[id as "mochi"])));
+    for (const thief of CAT_IDS) {
+      const rivals = CAT_IDS.filter((id) => id !== thief);
+      const posts = new Set(rivals.map((id) => key(rivalPost(id, thief))));
+      expect(posts, thief).toEqual(original);
+      // and the stand-in plays the role of the spot it fills
+      for (const id of rivals) expect(rivalPost(id, thief).slot, `${thief}:${id}`).toBe(id === "fishcat" ? thief : id);
+    }
   });
 
   it("orders the eight zones like the blueprint", () => {

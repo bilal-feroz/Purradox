@@ -305,9 +305,13 @@ export class CatAnimator {
       wantYaw = Math.sin(this.time * 0.37) * 0.35 + Math.sin(this.time * 1.13) * 0.08;
       wantPitch = Math.sin(this.time * 0.29) * 0.08;
     }
-    if (sb > 0.5) wantPitch = Math.max(wantPitch, 0.22);
+    // idle sitting cats tip their chin up a little
+    if (sb > 0.5 && !inp.lookTarget) wantPitch = Math.max(wantPitch, 0.12);
+    // Sitting tips the body back and the neck up (about 0.55 rad of nose-up
+    // between them); take that back out so the gaze lands where it aims.
+    const sitUp = sb * (0.4 * 0.62 + 0.3);
     this.headYaw = damp(this.headYaw, wantYaw, 6, dt);
-    this.headPitch = damp(this.headPitch, wantPitch, 6, dt);
+    this.headPitch = damp(this.headPitch, wantPitch - sitUp, 6, dt);
     rig.neck.rotation.x = this.neckPitch - this.pitch * 0.6;
     rig.neck.rotation.z = -this.roll * 0.5;
     const shake = action === "stagger" ? Math.sin(at * 30) * 0.25 * Math.max(0, 1 - at / 0.6) : 0;

@@ -110,7 +110,7 @@ export class RivalBrain {
   private stuckT = 0;
   private readonly lastProgress = new THREE.Vector3();
   private readonly home: THREE.Vector3;
-  private readonly homeYaw: number;
+  private homeYaw: number;
   private readonly rng: Random;
   private ambushIndex = 0;
   private pounceTimer = 0;
@@ -127,7 +127,7 @@ export class RivalBrain {
   /** Set when this cat reached its escape point while holding the fish. */
   escaped = false;
   private readonly escapePos = new THREE.Vector3();
-  readonly p: Personality;
+  p: Personality;
   /** Debug: current navigation target. */
   readonly goal = new THREE.Vector3();
   enabled = true;
@@ -166,6 +166,18 @@ export class RivalBrain {
     this.home = new THREE.Vector3(...s.pos);
     this.homeYaw = s.yaw;
     this.rng = new Random(seed);
+  }
+
+  /** Round 1 post for this run (a stand-in takes over the thief's own spot and role). */
+  setPost(p: { pos: [number, number, number]; yaw: number }, archetype: Archetype): void {
+    this.home.set(p.pos[0], p.pos[1], p.pos[2]);
+    this.homeYaw = p.yaw;
+    this.p = PERSONALITY[archetype];
+  }
+
+  /** Back to this cat's own personality (Round 2 allies). */
+  setArchetype(archetype: Archetype): void {
+    this.p = PERSONALITY[archetype];
   }
 
   reset(): void {

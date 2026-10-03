@@ -81,6 +81,18 @@ export const SPAWN = {
   } as Record<CatId, { pos: V3; yaw: number }>,
 };
 
+/**
+ * Mochi, Soot and Beans each own a spot on the street (Fish Cat's rivals in
+ * the original run). When one of them is the thief, Fish Cat stands in at
+ * the spot it left empty and plays that spot's role (`slot`), so every thief
+ * meets the same three threats in Round 1. (Round 2 hunters always start
+ * from their own spots, as their cards describe.)
+ */
+export function rivalPost(id: CatId, thief: CatId): { pos: V3; yaw: number; slot: CatId } {
+  const slot = id === "fishcat" && thief !== "fishcat" ? thief : id;
+  return { ...SPAWN.ai[slot], slot };
+}
+
 export const INTERACTABLES = {
   fishScraps: [-11, 0, 22.3] as V3,
   bottle: [3.2, 1.0, 19.6] as V3,

@@ -340,7 +340,7 @@ export function registerRunFlow(g: Game): void {
       const history = g.settings.alleyMemory ? loadMemory() : [];
       const habit = g.settings.alleyMemory ? recallHabit(history, entry) : null;
       g.trace = analyzeTrace(g.replay, g.graph);
-      g.sim = simulateCounterfactuals(g.trace, g.graph, g.otherIds().map(agentFor), g.fingerprint, undefined, habit?.counter);
+      g.sim = simulateCounterfactuals(g.trace, g.graph, g.otherIds().map((id) => agentFor(id)), g.fingerprint, undefined, habit?.counter);
       g.plan = planCouncil(g.sim, g.fingerprint, g.profileTags);
       g.plan.memory = habit;
       if (g.settings.alleyMemory) saveMemory(remember(history, { ...entry, strategy: g.plan.strategyId }));
