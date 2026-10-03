@@ -28,13 +28,13 @@ jumps, pounces and hisses, while the other two cats carry out the council's plan
 |---|---|
 | **WASD** | Move (camera-relative) |
 | **Mouse** | Camera (click the game to capture the mouse) |
-| **Shift** | Sprint (no stamina) |
+| **Shift** | Sprint: about 3.5 s of stamina (the ring beside your cat), refills when you ease off. Run it dry and you're winded for a moment. Rivals tire too |
 | **Space** | Jump (coyote time + jump buffering; hold for higher) |
 | **Left mouse** | Pounce: a lunge that knocks rivals over or loosens the carrier's Fish Grip |
 | **Right mouse / Q** | Hiss: a frontal cone (you snap to face a rival that is winding up). Rivals flash a yellow **!** just before they lunge; a pounce that hits you mid-hiss is a **Perfect Hiss** and the attacker bounces off |
 | **E** | Interact (trash can, pigeon feed, fish scraps, bottle, laundry) |
 | **R** | Scent Memory (Round 2 only): reveals the next 2–3 s of Past You's path as sea-glass paw prints |
-| **Esc** | Pause / release the mouse |
+| **Esc** | Pause from any screen: resume, restart the round, settings, main menu |
 
 Pounce beats bad positioning. Hiss beats a predictable pounce. Waiting beats a premature hiss.
 
@@ -48,7 +48,7 @@ npm run dev        # http://localhost:5173
 ```
 
 ```bash
-npm run verify     # TypeScript check + 64 unit tests + production build
+npm run verify     # TypeScript check + 71 unit tests + production build
 npm run build      # static build in dist/ (relative paths, host anywhere)
 npm run preview    # serve the production build
 ```
@@ -105,14 +105,14 @@ Most game AI only reacts to the present. Here the human's run becomes a determin
 
 Different habits really do produce different plans: a street run gets **THE ROOFTOP TRAP**, the same route with three distractions gets **THE BAIT**, and a both-shortcuts run gets **THE DOUBLE CUT**. The full write-up, with the scoring formula and an architecture diagram, is in [`docs/game-tech.md`](docs/game-tech.md).
 
-**Alley Memory** (optional, in Settings): the last five runs are remembered in this browser only. When a habit repeats three runs in a row ("3 RUNS IN A ROW YOU TOOK THE STREET AT BOTH SPLITS."), the strategy that answers it gets a small, visible bonus and the council map says so. No backend, and a first-time player is never affected.
+**Alley Memory** (optional, in Settings): the last five runs are remembered in this browser only. When a habit repeats three runs in a row ("3 RUNS IN A ROW YOU TOOK THE STREET AT BOTH SPLITS."), the strategy that answers it gets a small, visible bonus, and when that plan wins the council card marks it ("3 RUNS IN A ROW"). No backend, and a first-time player is never affected.
 
 An optional LLM layer can be plugged in server-side (see [`server/README.md`](server/README.md)) to **name and explain** the plan the simulator already chose. It never picks strategies or moves cats, receives only rounded numbers and the chosen plan, must return schema-validated JSON, and any timeout (1.4 s), error or invalid answer keeps the deterministic wording. Gameplay never waits on the network.
 
 ### Presentation
 
-- **Opening:** the first run of a session opens with a skippable ~6 s camera flight from the Safe Rooftop, over the laundry roofs and the Pigeon Courtyard, into the Fish Market and onto the hero fish. Your thief notices the fish; the rival down the street notices your thief.
-- **Alley Council map:** before the rewind, a little map of Sardine Street draws your route, each council cat dashes to its simulated intercept, and the card shows your player profile and the counter-plan, then **THEY KNOW YOUR ROUTE.**
+- **Alley Council map:** after RUN RECORDED and a wordless cut to the cats watching from the roof, a little map of Sardine Street draws your route while each council cat dashes to its simulated intercept. The card names you and the plan in two short lines, then **THEY KNOW YOUR ROUTE.**
+- **Losing as the thief:** if a rival knocks the fish loose, grabs it and reaches its escape point, Round 1 is lost: a **FISH LOST** card with TRY AGAIN or MAIN MENU.
 - **Juice:** comic MRRP! / HSSS! / MRAOW! over the cats (rate limited), ears that flick toward sounds, a fish that flops in your mouth, a sleeping market dog that opens one eye at chaos, a newspaper that blows down the alley when you dash past.
 - **Audio:** procedural SFX plus a rival's yowl, distant church bells and scooters. The Round 1 theme tightens as rivals close in or the final climb starts; Round 2 plays it reversed, lower and bent into the minor, with a ticking clock that grows as you close in on Past You.
 - **Results:** six real numbers from both rounds (run time, route, council plan, the steal or Past You's grip left, Perfect Hisses, props or intercepts) and **MAKE A SHARE CARD**: a 1200×630 image drawn locally from the current frame ("I STOLE A FISH FROM MYSELF IN 7.9 SECONDS.") with **DOWNLOAD IMAGE**.

@@ -24,9 +24,9 @@ Game AI usually only pretends to know you: a rival sees the same scripted level 
 
 ## Gameplay
 
-1. **Round 1 — Steal the fish.** As **Fish Cat** (after your first full run, **Choose Your Thief** from all four cats), grab the hero fish in the Fish Market and escape through eight connected zones of Sardine Street (Market Exit, the First Alley route split, the Pigeon Courtyard, the Second Alley climb, the Laundry Rooftops and the Final Climb) to the **Safe Rooftop**. The other three cats hunt you with their own personalities: Mochi pressures early, Soot ambushes chokepoints, Beans causes chaos, Fish Cat waits for an opening. They see (field of view, line of sight, short memory) and hear (footsteps, crashing props, the fishmonger's bell when the fish leaves the table). Rival pounces cost **Fish Grip** (3 → 0); at zero the fish flies loose, and a rival that grabs it runs for an escape point: **FISH LOST** and an instant retry. Every rival lunge is telegraphed by a yellow **!**: hiss on it to bounce them off, and go 8 seconds clean to tighten your grip again. Five props (fish scraps, bottle, trash can, pigeon feed, laundry line) distract or tangle the rivals.
-2. **RUN COMPLETE → RUN RECORDED → "But someone else was watching."** The rivals were on the roof the whole time.
-3. **THE ALLEY COUNCIL IS PLOTTING…** The council profiles your run, simulates about 2,200 counter-plans against your recording and shows its pick on a little map of Sardine Street: your route, each cat racing to its intercept, your **PLAYER PROFILE** (e.g. *ROOFTOP RUNNER: 43% of your run was above street level*) and the **COUNTER-PLAN** (e.g. *THE ROOFTOP TRAP: "YOU ALWAYS LAND HERE."*). Then: **THEY KNOW YOUR ROUTE.**
+1. **Round 1 — Steal the fish.** As **Fish Cat** (after your first full run, **Choose Your Thief** from all four cats), grab the hero fish in the Fish Market and escape through eight connected zones of Sardine Street (Market Exit, the First Alley route split, the Pigeon Courtyard, the Second Alley climb, the Laundry Rooftops and the Final Climb) to the **Safe Rooftop**. The other three cats hunt you with their own personalities: Mochi pressures early, Soot ambushes chokepoints, Beans causes chaos, Fish Cat waits for an opening. They see (field of view, line of sight, short memory) and hear (footsteps, crashing props, the fishmonger's bell when the fish leaves the table). Rival pounces cost **Fish Grip** (3 → 0); at zero the fish flies loose, and a rival that grabs it runs for an escape point: catch it or the round is lost (**FISH LOST**, try again). Sprinting costs stamina, for you and the rivals alike, so you sprint in bursts. Every rival lunge is telegraphed by a yellow **!**: hiss on it to bounce them off, and go 8 seconds clean to tighten your grip again. Five props (fish scraps, bottle, trash can, pigeon feed, laundry line) distract or tangle the rivals.
+2. **RUN RECORDED**, then a wordless cut: the rivals were watching from the roof the whole time.
+3. **The Alley Council** profiles your run, simulates about 2,200 counter-plans against your recording and shows its pick on a little map of Sardine Street: your route, each cat racing to its intercept, and two short lines (*YOU: ROOFTOP RUNNER*, *THE PLAN: THE ROOFTOP TRAP*). Then: **THEY KNOW YOUR ROUTE.**
 4. **Rewind.** The whole street runs backwards in a diorama shot while your recorded route glows and shrinks back to the market.
 5. **Round 2 — Hunt Past You.** Pick one of the other three cats; the remaining two are AI allies carrying out the council's plan. Past You replays your exact run. Use **Scent Memory** to preview the next few seconds of its path, predict its shortcuts, intercept, and pounce its grip away. Watch out: if you pounce while Past You is replaying one of your hisses, **Past You Perfect-Hisses you** (it flashes the same yellow **!** a moment before, so you can hold back). Steal the fish to see **TIMELINE BROKEN**; if Past You reaches the rooftop first, it's **PAST YOU WAS TOO GOOD**.
 
@@ -45,7 +45,7 @@ Core rules: pounce beats bad positioning, hiss beats a predictable pounce, waiti
 - **Tactical Planner:** turns the winner into roles, ambush zones and prop traps, and explains it with evidence (*"You used 2 of 2 shortcuts. Both route splits are covered: Mochi at the Pigeon Courtyard, Soot at the Low Roofs."*).
 - **Multi-Agent Coordinator:** the two AI allies get missions and re-plan only at discrete moments. They still have to walk there, see Past You and wind up their pounces; nothing snaps to a future position. Helpers can wear the grip down but never take the final point: the steal belongs to the player.
 
-Different players get different plans. In our recorded test runs a street run drew **THE ROOFTOP TRAP**, the same route with three distractions drew **THE BAIT**, and a both-shortcuts run drew **THE DOUBLE CUT**. With the optional **Alley Memory** the council also remembers your last five runs (in your browser only): after three street runs in a row it says so and switches to **THE CHOKE**. Add `?aiDebug=1` to the URL to watch every candidate, score, assignment and predicted intercept live. Full write-up: [`docs/game-tech.md`](docs/game-tech.md).
+Different players get different plans. In our recorded test runs a street run drew **THE ROOFTOP TRAP**, the same route with three distractions drew **THE BAIT**, and a both-shortcuts run drew **THE DOUBLE CUT**. With the optional **Alley Memory** the council also remembers your last five runs (in your browser only): after three street runs in a row it switches to **THE CHOKE** and marks the plan "3 RUNS IN A ROW". Add `?aiDebug=1` to the URL to watch every candidate, score, assignment and predicted intercept live. Full write-up: [`docs/game-tech.md`](docs/game-tech.md).
 
 ## Tech stack
 
@@ -68,12 +68,12 @@ TypeScript · Vite · Three.js (WebGL2) · Rapier 3D (WASM kinematic character c
 
 ## Demo flow (≈3 minutes)
 
-1. **STEAL THE FISH.** A short camera flight over Sardine Street lands on the hero fish (click to skip). Grab it from the market table.
+1. **STEAL THE FISH.** Grab the sparkling fish from the market table.
 2. Mochi gives chase. **Pounce** to knock it over, then hiss the moment the yellow **!** pops over its head for a **PERFECT HISS!**
 3. Spill the **pigeon feed** in the courtyard: the flock bursts and the rivals get distracted.
 4. Take the **awning shortcut** (crates → coral awning → teal awning → terrace).
 5. Climb the second alley, cross the laundry rooftops and make the final jump to the **Safe Rooftop**.
-6. **RUN COMPLETE … RUN RECORDED … But someone else was watching.** The Alley Council maps your route and picks its counter-plan (for example **THE ROOFTOP TRAP**) … **THEY KNOW YOUR ROUTE.**
+6. **RUN RECORDED** … the cats on the roof … the Alley Council maps your route and picks its counter-plan (for example **THE ROOFTOP TRAP**) … **THEY KNOW YOUR ROUTE.**
 7. **Rewind** diorama, then choose **Soot**.
 8. Past You starts the exact run. Press **R** for Scent Memory and cut it off at the route split you remember.
 9. Pounce just as Past You replays your hiss → **Past You Perfect-Hisses you.** *That hiss was recorded.*
@@ -85,7 +85,7 @@ TypeScript · Vite · Three.js (WebGL2) · Rapier 3D (WASM kinematic character c
 ```bash
 npm install
 npm run dev       # play locally at http://localhost:5173
-npm run verify    # type check + 64 unit tests + production build
+npm run verify    # type check + 71 unit tests + production build
 npm run build     # static build in dist/ (deployable anywhere)
 ```
 

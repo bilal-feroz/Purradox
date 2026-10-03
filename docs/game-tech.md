@@ -116,8 +116,13 @@ pigeons.
   the table. What they do with a sound depends on their archetype.
 - **Round 1 stakes:** rival pounces cost Fish Grip (3 → 0). At zero the fish
   flies loose; a rival that grabs it runs for one of the street's escape
-  points (carrying the fish slows it down). If it gets away: FISH LOST and an
-  instant retry.
+  points (carrying the fish slows it down). If it gets away, Round 1 is lost
+  (a FISH LOST card: try again or main menu).
+- **Stamina:** every cat, human or AI, has the same sprint bar (about 3.6 s
+  of sprinting, refilled over 2.4 s, winded when run dry), so chases are
+  burst against burst. Holding sprint the whole way averages roughly half
+  the run sprinting, which is also the 85%-of-sprint travel speed the
+  planner assumes for the council cats.
 
 ## 3. Behavior Profiler
 
@@ -286,9 +291,9 @@ see this.
 
 ## Verification
 
-- `npm run verify`: TypeScript, **64 unit tests** and a production build.
-  Tests cover the replay engine, game-state machine and Choose Your Thief
-  transitions, Fish Grip rules, rewind history, level and nav-graph data,
+- `npm run verify`: TypeScript, **71 unit tests** and a production build.
+  Tests cover the replay engine, game-state machine (Choose Your Thief,
+  the FISH LOST defeat, Esc → main menu from every screen), sprint stamina, Fish Grip rules, rewind history, level and nav-graph data,
   telemetry, the Behavior Profiler, the Counterfactual Simulator (trace
   analysis, hundreds of ranked candidates, feasible non-overlapping plans,
   any pair of allies, fingerprint steering, habit focus), Alley Memory
