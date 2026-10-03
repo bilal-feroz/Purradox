@@ -101,6 +101,17 @@ export class HUD {
 
     this.alerts = el("div", "alerts");
     this.root.appendChild(this.alerts);
+
+    this.lockHint = el("div", "click-hint", "CLICK TO STEER THE CAMERA WITH YOUR MOUSE");
+    this.lockHint.style.display = "none";
+    this.root.appendChild(this.lockHint);
+  }
+
+  private readonly lockHint: HTMLDivElement;
+
+  setLockHint(show: boolean): void {
+    const want = show ? "block" : "none";
+    if (this.lockHint.style.display !== want) this.lockHint.style.display = want;
   }
 
   show(on: boolean): void {

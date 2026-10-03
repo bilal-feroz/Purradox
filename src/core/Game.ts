@@ -14,6 +14,7 @@ import { Interactables, type InteractHooks } from "../level/Interactable";
 import { PigeonFlock } from "../level/Pigeons";
 import { ResetManager } from "../level/ResetManager";
 import { buildSardineStreet } from "../level/SardineStreet";
+import { GoalBeacon } from "../level/GoalBeacon";
 import { WaypointGraph } from "../level/WaypointGraph";
 import { isElevated, zoneAt } from "../level/Zones";
 import { PhysicsWorld } from "../physics/PhysicsWorld";
@@ -92,6 +93,7 @@ export class Game {
   physics!: PhysicsWorld;
   sky!: Sky;
   water!: Water;
+  beacon!: GoalBeacon;
   fish!: FishSystem;
   combat!: CombatSystem;
   interactables!: Interactables;
@@ -184,6 +186,7 @@ export class Game {
     this.sky = new Sky(this.scene, this.materials, sunDir);
     const level = buildSardineStreet(this.scene, this.physics, this.materials);
     this.water = new Water(this.scene, H.sea, level.shoreDistance);
+    this.beacon = new GoalBeacon(this.scene, new THREE.Vector3(SPAWN.goal[0], SPAWN.goal[1] + 0.05, SPAWN.goal[2] - 1.2));
     progress(0.6, "Herding cats…");
     await nextFrame();
     this.createActors();
@@ -380,11 +383,14 @@ export class Game {
     this.start.onStart = () => {
       this.audio.unlock();
       this.audio.play("ui");
+      // Request pointer lock inside the click gesture (browsers require it).
+      this.input.requestPointerLock();
       if (this.fsm.state === GameState.MENU) this.fsm.transition(GameState.INTRO);
     };
     this.start.onSettings = (s) => this.applySettings(s);
     this.select.onPick = (id) => {
       this.audio.play("ui");
+      this.input.requestPointerLock();
       this.hunterId = id;
       if (this.fsm.state === GameState.CAT_SELECTION) this.fsm.transition(GameState.HUNT);
     };
@@ -649,6 +655,7 @@ export class Game {
   updateHUD(): void {
     const ctl = this.controlled;
     const now = this.time.realTime;
+    this.hud.setLockHint(this.isGameplay() && !this.input.pointerLocked && !this.paused && !this.manualStepping);
     if (ctl) {
       const ab = ctl.abilities;
       this.hud.setAbility("pounce", ab.pounceState !== "idle" ? 0 : ab.pounceCooldown / ab.pounceCooldownMax, ab.pounceState === "windup" || ab.pounceState === "active");
@@ -706,6 +713,7 @@ export class Game {
     this.fsm.update(this.time.realDt);
     this.water.update(this.time.realTime);
     this.sky.update(this.time.realDt);
+    this.beacon.update(this.time.realTime, this.camera.camera.position, this.fsm.is(GameState.INTRO, GameState.FISH_RUN, GameState.HUNT), this.round === 2);
     this.effects.update(this.fsm.is(GameState.REWIND) ? this.time.realDt : dt, this.camera.camera);
     this.prints.update(dt, this.time.realTime);
     this.lighting.setFocus(this.controlled ? this.controlled.position : this.camera.pivot);

@@ -267,6 +267,51 @@ export function fishStall(b: LevelBuilder, x: number, y: number, z: number, face
   b.collider(x - hx, x + hx, y, y + counterH, z - hz, z + hz);
 }
 
+/**
+ * Wayfinding: a hand-painted wooden arrow board with a fish on it, bolted
+ * to a wall (or a post). `yaw` is the direction the arrow points.
+ */
+export function arrowSign(b: LevelBuilder, x: number, y: number, z: number, yaw: number, post = false, tilt = 0): void {
+  const parts: THREE.BufferGeometry[] = [];
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.55, -0.17);
+  shape.lineTo(0.28, -0.17);
+  shape.lineTo(0.28, -0.32);
+  shape.lineTo(0.62, 0);
+  shape.lineTo(0.28, 0.32);
+  shape.lineTo(0.28, 0.17);
+  shape.lineTo(-0.55, 0.17);
+  shape.closePath();
+  const board = lowPoly(new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: false }), PALETTE.woodHoney, { variance: 0.05 });
+  board.translate(0, 0, -0.03);
+  parts.push(board);
+  // painted fish on both faces
+  for (const s of [1, -1]) {
+    const f = lowPoly(new THREE.SphereGeometry(0.1, 6, 3), PALETTE.uiNavy, { variance: 0 });
+    f.scale(1.9, 0.75, 0.25);
+    f.translate(-0.12, 0, s * 0.035);
+    parts.push(f);
+    const tail = lowPoly(new THREE.ConeGeometry(0.07, 0.12, 3), PALETTE.uiNavy, { variance: 0 });
+    tail.rotateZ(Math.PI / 2);
+    tail.scale(1, 1, 0.3);
+    tail.translate(-0.34, 0, s * 0.035);
+    parts.push(tail);
+  }
+  if (post) {
+    const p = lowPoly(cylUp(0.05, 0.06, 1.7, 6), PALETTE.woodDark);
+    p.translate(-0.4, -1.65, 0);
+    parts.push(p);
+  } else {
+    parts.push(place(lowPoly(box(0.06, 0.06, 0.4), PALETTE.metalDark), -0.4, 0.05, -0.2));
+  }
+  const g = merge(parts);
+  // board lies in its local XY plane; arrow points +X → rotate so it points along yaw
+  g.rotateZ(tilt);
+  g.rotateY(yaw - Math.PI / 2);
+  g.translate(x, y, z);
+  b.add(g);
+}
+
 export function lantern(b: LevelBuilder, x: number, y: number, z: number): void {
   const frame = merge([
     lowPoly(boxUp(0.22, 0.04, 0.22), PALETTE.metalDark),

@@ -14,7 +14,7 @@ export class Water {
 
   constructor(scene: THREE.Scene, seaLevel: number, shoreDistance: (x: number, z: number) => number) {
     const size = 520;
-    const seg = 130;
+    const seg = 96;
     const geo = new THREE.PlaneGeometry(size, size, seg, seg);
     geo.rotateX(-Math.PI / 2);
     geo.translate(40, 0, -40);

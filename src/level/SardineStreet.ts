@@ -503,6 +503,18 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
     if (rng.chance(0.6)) P.tileRoof(b, x0, x1, z0, z1, top, rng.chance(0.5));
   }
 
+  // Wayfinding: painted fish arrow signs at every route decision.
+  P.arrowSign(b, -8.2, H.market + 1.65, 18.6, Math.PI / 2, true);
+  P.arrowSign(b, 6.2, H.exit + 1.65, 9.3, Math.PI, true, 0.35);
+  P.arrowSign(b, 10.4, H.exit + 1.65, 20.6, Math.PI / 2, true);
+  P.arrowSign(b, 26.6, H.exit + 1.65, 16.6, Math.PI, true);
+  P.arrowSign(b, 20.6, H.court + 1.65, -8.4, Math.atan2(-19.5, -27.5), true);
+  P.arrowSign(b, 4.8, H.court + 1.65, -34.6, Math.PI, true, 0.3);
+  P.arrowSign(b, 29.2, H.court + 1.65, -26.6, Math.atan2(1, -1), true, 0.35);
+  P.arrowSign(b, -3.4, H.alley2 + 1.65, -49.6, Math.PI / 2, true, 0.35);
+  P.arrowSign(b, 23.6, H.roof + 1.65, -46.4, Math.PI / 2, true);
+  P.arrowSign(b, 45.4, H.roof + 1.65, -55.4, Math.atan2(1, -1.2), true, 0.25);
+
   // shoreline distance for water shading
   const shoreDistance = (x: number, z: number): number => {
     let best = Infinity;

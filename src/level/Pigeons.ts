@@ -31,6 +31,30 @@ interface Pigeon {
   seed: number;
 }
 
+/** Mirror a non-indexed geometry across X, fixing triangle winding. */
+function mirrorX(src: THREE.BufferGeometry): THREE.BufferGeometry {
+  const g = src.clone();
+  g.scale(-1, 1, 1);
+  for (const name of ["position", "normal", "color"]) {
+    const a = g.getAttribute(name) as THREE.BufferAttribute | undefined;
+    if (!a) continue;
+    const arr = a.array as Float32Array;
+    const s = a.itemSize;
+    for (let t = 0; t < a.count; t += 3) {
+      for (let k = 0; k < s; k++) {
+        const i1 = (t + 1) * s + k;
+        const i2 = (t + 2) * s + k;
+        const tmp = arr[i1];
+        arr[i1] = arr[i2];
+        arr[i2] = tmp;
+      }
+    }
+    a.needsUpdate = true;
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 /** Shared low-poly pigeon geometry built from the pigeon reference sheet. */
 function pigeonGeometry(): { body: THREE.BufferGeometry; wing: THREE.BufferGeometry } {
   const C = PIGEON_COLORS;
@@ -47,10 +71,17 @@ function pigeonGeometry(): { body: THREE.BufferGeometry; wing: THREE.BufferGeome
     lowPoly(place(box(0.07, 0.02, 0.1), 0.06, 0.01, 0.05), C.feet),
     lowPoly(place(box(0.07, 0.02, 0.1), -0.06, 0.01, 0.05), C.feet),
   ]);
-  // wing: flat-ish slab with charcoal bands, pivot at the shoulder (x=0)
-  const wing = merge([
-    lowPoly(place(box(0.3, 0.035, 0.26, 3, 1, 2), 0.15, 0, -0.02), (c) => (c.z < -0.06 && c.z > -0.1 ? C.bands : c.z < 0.0 && c.z > -0.03 ? C.bands : C.wingLight), { variance: 0.06 }),
-  ]);
+  // wing: tapered slab with two charcoal bars, pivot at the shoulder (x=0)
+  const wingShape = new THREE.Shape();
+  wingShape.moveTo(0, 0.12);
+  wingShape.lineTo(0.3, 0.06);
+  wingShape.lineTo(0.34, -0.14);
+  wingShape.lineTo(0.12, -0.24);
+  wingShape.lineTo(0, -0.12);
+  wingShape.closePath();
+  const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.035, bevelEnabled: false });
+  wingGeo.rotateX(Math.PI / 2); // lie in XZ: leading edge +Z (head), feathers trail to -Z
+  const wing = lowPoly(wingGeo, (c) => ((c.z < -0.02 && c.z > -0.07) || (c.z < -0.11 && c.z > -0.16) || c.x > 0.27 ? C.bands : C.wingLight), { variance: 0.06 });
   return { body, wing };
 }
 
@@ -63,6 +94,9 @@ export class PigeonFlock implements Resettable {
   readonly pigeons: Pigeon[] = [];
   private readonly rng = new Random(321);
   private readonly perches: THREE.Vector3[];
+  private readonly bodyInst: THREE.InstancedMesh;
+  private readonly wingLInst: THREE.InstancedMesh;
+  private readonly wingRInst: THREE.InstancedMesh;
   burstCount = 0;
 
   constructor(
@@ -91,26 +125,30 @@ export class PigeonFlock implements Resettable {
       new THREE.Vector3(24, 9.6, -60),
       new THREE.Vector3(-9.5, 13.4, -44.5),
     ];
+    // The whole flock renders as three instanced meshes (body, left wing,
+    // right wing) — 3 draw calls instead of 3 per bird.
+    const n = homes.length;
+    this.bodyInst = new THREE.InstancedMesh(body, mats.world, n);
+    this.wingLInst = new THREE.InstancedMesh(wing, mats.world, n);
+    this.wingRInst = new THREE.InstancedMesh(mirrorX(wing), mats.world, n);
+    for (const m of [this.bodyInst, this.wingLInst, this.wingRInst]) {
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.frustumCulled = false;
+      m.receiveShadow = true;
+      scene.add(m);
+    }
+    this.bodyInst.castShadow = true;
     for (let i = 0; i < homes.length; i++) {
+      // Transform-only hierarchy (never rendered directly).
       const root = new THREE.Group();
       const bodyG = new THREE.Group();
-      const bm = new THREE.Mesh(body, mats.world);
-      bm.castShadow = true;
-      bodyG.add(bm);
       const wingL = new THREE.Group();
       wingL.position.set(0.12, 0.3, 0.02);
-      const wl = new THREE.Mesh(wing, mats.world);
-      wl.castShadow = true;
-      wingL.add(wl);
       const wingR = new THREE.Group();
       wingR.position.set(-0.12, 0.3, 0.02);
-      const wr = new THREE.Mesh(wing, mats.world);
-      wr.scale.x = -1;
-      wingR.add(wr);
       bodyG.add(wingL, wingR);
       root.add(bodyG);
       root.scale.setScalar(this.rng.range(0.92, 1.1));
-      scene.add(root);
       const home = new THREE.Vector3(...homes[i]);
       this.pigeons.push({
         root,
@@ -148,6 +186,21 @@ export class PigeonFlock implements Resettable {
       this.pose(p, 0);
     }
     this.burstCount = 0;
+    this.syncInstances();
+  }
+
+  /** Copy every bird's posed hierarchy into the instanced meshes. */
+  private syncInstances(): void {
+    for (let i = 0; i < this.pigeons.length; i++) {
+      const p = this.pigeons[i];
+      p.root.updateMatrixWorld(true);
+      this.bodyInst.setMatrixAt(i, p.body.matrixWorld);
+      this.wingLInst.setMatrixAt(i, p.wingL.matrixWorld);
+      this.wingRInst.setMatrixAt(i, p.wingR.matrixWorld);
+    }
+    this.bodyInst.instanceMatrix.needsUpdate = true;
+    this.wingLInst.instanceMatrix.needsUpdate = true;
+    this.wingRInst.instanceMatrix.needsUpdate = true;
   }
 
   /** Startle every grounded pigeon within radius. */
@@ -267,17 +320,18 @@ export class PigeonFlock implements Resettable {
       }
       this.pose(p, dt);
     }
+    this.syncInstances();
   }
 
   private pose(p: Pigeon, _dt: number): void {
     p.root.position.copy(p.pos);
     p.root.rotation.y = p.yaw;
     const air = p.state === "flying" || p.state === "returning";
-    const wingAng = air ? Math.sin(p.flap) * 1.1 + 0.3 : 0.05;
-    p.wingL.rotation.set(0, 0, wingAng + (air ? 0 : -0.15));
-    p.wingR.rotation.set(0, 0, -wingAng - (air ? 0 : -0.15));
-    p.wingL.rotation.y = air ? -0.3 : 0;
-    p.wingR.rotation.y = air ? 0.3 : 0;
+    // Folded: wings hang down against the body (reference "front/left");
+    // flying: big flaps between raised and swept-down.
+    const wingAng = air ? Math.sin(p.flap) * 1.05 - 0.15 : -1.32;
+    p.wingL.rotation.set(0, air ? -0.25 : -0.12, wingAng);
+    p.wingR.rotation.set(0, air ? 0.25 : 0.12, -wingAng);
     // pecking bob
     const peck = p.state === "ground" && p.peck > 0 ? Math.max(0, Math.sin((p.t + p.seed) * 7)) * 0.5 : 0;
     p.body.rotation.x = air ? -0.15 : peck;
@@ -301,6 +355,7 @@ export class PigeonFlock implements Resettable {
         p.peck = 0;
         this.pose(p, 0);
       });
+      this.syncInstances();
     },
   };
 }

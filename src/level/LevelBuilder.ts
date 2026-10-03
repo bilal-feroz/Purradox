@@ -180,19 +180,41 @@ export class LevelBuilder {
     this.physics.addOrientedBox(center, half, q);
   }
 
-  finalize(scene: THREE.Scene, mats: Materials): void {
+  /**
+   * Merge into spatial chunks (per material bucket) so both the main camera
+   * and the sun's shadow camera can frustum-cull most of the town.
+   */
+  finalize(scene: THREE.Scene, mats: Materials, chunkSize = 30): void {
+    const box = new THREE.Box3();
+    const c = new THREE.Vector3();
     for (const [bucket, list] of this.buckets) {
-      const geo = merge(list);
-      geo.computeBoundingSphere();
+      const chunks = new Map<string, THREE.BufferGeometry[]>();
+      for (const g of list) {
+        g.computeBoundingBox();
+        box.copy(g.boundingBox!);
+        box.getCenter(c);
+        const key = `${Math.floor(c.x / chunkSize)}:${Math.floor(c.z / chunkSize)}`;
+        let arr = chunks.get(key);
+        if (!arr) {
+          arr = [];
+          chunks.set(key, arr);
+        }
+        arr.push(g);
+      }
       const mat = bucket === "glow" ? mats.glow : mats.world;
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.castShadow = bucket === "world";
-      mesh.receiveShadow = true;
-      mesh.matrixAutoUpdate = false;
-      mesh.updateMatrix();
-      scene.add(mesh);
-      this.meshes.push(mesh);
-      this.triangleCount += geo.getAttribute("position").count / 3;
+      for (const geos of chunks.values()) {
+        const geo = merge(geos);
+        geo.computeBoundingSphere();
+        geo.computeBoundingBox();
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.castShadow = bucket === "world";
+        mesh.receiveShadow = true;
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
+        scene.add(mesh);
+        this.meshes.push(mesh);
+        this.triangleCount += geo.getAttribute("position").count / 3;
+      }
     }
     this.buckets.clear();
   }
