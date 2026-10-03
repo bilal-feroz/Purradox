@@ -4,8 +4,10 @@ import { H, SPAWN, ZONES } from "../data/level";
 import { PALETTE } from "../data/palette";
 import { AudioManager } from "../audio/AudioManager";
 import { TacticalDirector, HttpStrategyProvider } from "../ai/TacticalDirector";
-import type { TacticalPlan } from "../ai/TacticalFallback";
 import type { BehaviorFingerprint, BehaviorTag } from "../ai/BehaviorProfiler";
+import type { SimResult, TraceInfo } from "../ai/CounterfactualSimulator";
+import type { Coordinator } from "../ai/Coordinator";
+import type { CouncilPlan } from "../ai/TacticalPlanner";
 import { TelemetryTracker } from "../ai/TelemetrySummary";
 import { CatActor } from "../cats/CatActor";
 import { RivalBrain, type AIWorld } from "../cats/CatAI";
@@ -131,13 +133,20 @@ export class Game {
   round: 1 | 2 = 1;
   controlled: CatActor | null = null;
   replay: ReplayData | null = null;
-  plan: TacticalPlan | null = null;
+  /** The Alley Council plan (Counterfactual Simulator + Tactical Planner). */
+  plan: CouncilPlan | null = null;
+  /** Where/when Past You passes each waypoint (from the recording). */
+  trace: TraceInfo | null = null;
+  /** Every candidate the simulator fast-forwarded, best per strategy. */
+  sim: SimResult | null = null;
+  /** Round 2 ally coordinator (discrete re-planning). */
+  coordinator: Coordinator | null = null;
   /** How this human played Round 1 (Behavior Profiler). */
   fingerprint: BehaviorFingerprint | null = null;
   /** Tags derived from the fingerprint, most distinctive first. */
   profileTags: BehaviorTag[] = [];
-  /** In-flight Tactical Director request (started when the run ends). */
-  planRequest: Promise<TacticalPlan> | null = null;
+  /** In-flight explanation request (optional LLM layer); resolves to the plan. */
+  planRequest: Promise<CouncilPlan> | null = null;
   hunterId: CatId | null = null;
   /** First full two-round cycle done: unlocks Choose Your Thief. */
   thiefUnlocked = loadProgress().thiefUnlocked;
@@ -183,8 +192,8 @@ export class Game {
 
     const params = new URLSearchParams(location.search);
     const directorUrl = params.get("director") ?? (import.meta.env.VITE_DIRECTOR_URL as string | undefined) ?? null;
-    // The optional LLM council gets the whole end-of-run beat (~6 s) to answer.
-    this.director = new TacticalDirector(directorUrl ? new HttpStrategyProvider(directorUrl) : null, 6000);
+    // The optional LLM explanation layer gets the end-of-run beat (~5 s) to answer.
+    this.director = new TacticalDirector(directorUrl ? new HttpStrategyProvider(directorUrl) : null, 5000);
 
     this.hud = new HUD(uiRoot);
     this.start = new StartScreen(uiRoot, this.settings);
@@ -631,12 +640,12 @@ export class Game {
       quarry: q,
       quarryZone: z ? z.index : this.lastZoneIndex,
       rivalsMayCarry: round === 1,
+      // What a cat can infer from watching: current position and motion.
+      // (Even in Round 2 the agents never peek at Past You's recorded future;
+      // only the planner, before the round, studies the whole trace.)
       predict: (ahead, out) => {
-        if (round === 2 && this.echo.player) {
-          const s = this.echoSampleAt(this.echo.time + ahead);
-          return out.set(s[0], s[1], s[2]);
-        }
-        return out.copy(q.position).addScaledVector(q.velocity, ahead).setY(q.position.y);
+        const v = q.mode === "replay" && q.replay ? q.replay.velocity : q.velocity;
+        return out.copy(q.position).addScaledVector(v, ahead).setY(q.position.y);
       },
     };
   }
@@ -689,6 +698,22 @@ export class Game {
         this.bus.emit("sound", { type, x: p.x, y: p.y, z: p.z, radius, intensity, source: source ? source.id : "world" });
       },
     };
+  }
+
+  /**
+   * Round 2 environment trap: an ally springs a prop as Past You passes. It
+   * wears Past You's grip like a helper pounce (never the final point).
+   */
+  trapPastYou(by: CatActor, propId: string): void {
+    const it = this.interactables.list.find((i) => i.id === propId);
+    if (!it || !this.interactables.trigger(propId, by, this.interactHooks(by), this.effects, this.bus)) return;
+    const past = this.runner;
+    if (this.round !== 2 || past.mode !== "replay") return;
+    if (Math.hypot(past.position.x - it.position.x, past.position.z - it.position.z) > 5.2) return;
+    if (this.fish.owner === past) this.fish.damageGrip(past, by, 1);
+    past.flinch(this.tmp.subVectors(past.position, it.position).setY(0), 0.6);
+    this.effects.ring(it.position.clone().setY(it.position.y + 0.05), 2.2, 0xf7cf55, 0.5);
+    this.alert("COUNCIL TRAP!", "info");
   }
 
   /** Player pressed E. */

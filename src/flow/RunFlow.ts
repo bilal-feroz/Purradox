@@ -7,6 +7,9 @@ import { zoneAt } from "../level/Zones";
 import { recordEscape } from "../ui/records";
 import { ReplayRecorder } from "../replay/ReplayRecorder";
 import { deriveTags, fingerprint } from "../ai/BehaviorProfiler";
+import { analyzeTrace, simulateCounterfactuals } from "../ai/CounterfactualSimulator";
+import { buildRequest } from "../ai/TacticalDirector";
+import { agentFor, planCouncil } from "../ai/TacticalPlanner";
 
 const MENU_CAT = new THREE.Vector3(-18.6, 0, 13.4);
 /** Menu camera relative to the hero cat (cat sits right of frame). */
@@ -280,8 +283,14 @@ export function registerRunFlow(g: Game): void {
       g.fingerprint = fingerprint(summary);
       g.profileTags = deriveTags(g.fingerprint);
       g.debug?.log(`profile: ${g.profileTags.map((tg) => tg.title).join(", ")}`);
-      g.plan = null;
-      g.planRequest = g.director.analyze(summary);
+      // Counterfactual simulation: fast-forward many council plans against
+      // the recorded run, then let the planner pick and explain one.
+      g.trace = analyzeTrace(g.replay, g.graph);
+      g.sim = simulateCounterfactuals(g.trace, g.graph, g.otherIds().map(agentFor), g.fingerprint);
+      g.plan = planCouncil(g.sim, g.fingerprint, g.profileTags);
+      g.debug?.log(`council: ${g.plan.strategyName} — ${g.sim.evaluated} plans simulated in ${g.sim.ms.toFixed(0)} ms`);
+      // Optional LLM explanation layer (renames/explains only; may time out).
+      g.planRequest = g.director.explain(g.plan, buildRequest(g.plan, g.fingerprint, g.profileTags, summary));
       g.runner.setForcedAction("victory");
       g.runner.meow();
       g.audio.play("victory", { volume: 0.55 });

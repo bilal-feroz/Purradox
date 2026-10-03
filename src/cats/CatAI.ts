@@ -8,6 +8,7 @@ import type { NavNode, WaypointGraph } from "../level/WaypointGraph";
 import type { PhysicsWorld } from "../physics/PhysicsWorld";
 import { AI_POUNCE_WINDUP } from "../player/CatAbilities";
 import type { CatActor } from "./CatActor";
+import type { RoleId } from "../ai/CounterfactualSimulator";
 
 export type AIState =
   | "IDLE"
@@ -44,7 +45,9 @@ export interface Mission {
   /** Replay time Past You passes the point (R2). */
   arriveAt: number;
   zone: string;
-  role: "pressure" | "ambush" | "chaos";
+  role: RoleId;
+  /** Environment trap: the prop to spring as Past You comes by. */
+  prop?: string | null;
 }
 
 interface Personality {
@@ -146,6 +149,10 @@ export class RivalBrain {
   private readonly glancePoint = new THREE.Vector3();
   private lastDistQ = 99;
   onWantInteract: ((cat: CatActor) => void) | null = null;
+  /** Round 2: this ally finished its intercept; the coordinator re-plans. */
+  onMissionEnded: ((brain: RivalBrain) => void) | null = null;
+  /** Round 2: spring an environment trap on Past You. */
+  onTrap: ((cat: CatActor, prop: string) => void) | null = null;
 
   constructor(
     readonly id: CatId,
@@ -184,6 +191,8 @@ export class RivalBrain {
     this.helper = false;
     this.enabled = true;
     this.echoTime = null;
+    this.onMissionEnded = null;
+    this.onTrap = null;
     this.interactCooldown = 0;
     this.lastProgress.copy(this.home);
     this.actor.teleport(this.home, this.homeYaw);
@@ -282,7 +291,8 @@ export class RivalBrain {
         this.updateChase(dt, w, distQ);
         break;
       case "RECOVER":
-        if (this.stateT > 0.45) this.go("CHASE");
+        // helpers go back to their mission (which then asks for a re-plan)
+        if (this.stateT > 0.45) this.go(this.helper ? "MISSION" : "CHASE");
         break;
       case "AMBUSH":
         this.updateAmbush(dt, w, distQ);
@@ -546,16 +556,29 @@ export class RivalBrain {
       this.missionIdx++;
       this.missionDone = false;
       a.setForcedAction(null);
+      // discrete re-plan: ask the coordinator for the next intercept
+      if (this.missionIdx >= this.missions.length) this.onMissionEnded?.(this);
       return;
     }
     const d = this.moveTo(m.point, dt, w, true, 0.6);
+    const waits = m.role === "cut_off" || m.role === "hold_landing" || m.role === "late_collapse";
     if (d < 1.0) {
       a.intent.moveX = 0;
       a.intent.moveZ = 0;
-      if (m.role === "ambush" && a.forcedAction !== "crouch") a.setForcedAction("crouch");
+      if (waits && a.forcedAction !== "crouch") a.setForcedAction("crouch");
       this.faceToward(q.position);
     }
-    if (distQ < 5.5 && Math.abs(q.position.y - a.position.y) < 0.8) {
+    if (m.role === "environment_trap") {
+      // spring the prop as Past You comes by; trappers don't pounce
+      const pastNear = Math.hypot(q.position.x - m.point.x, q.position.z - m.point.z) < 4.6;
+      if (m.prop && d < 2.6 && pastNear && Math.abs(echoT - m.arriveAt) < 2.5) {
+        this.onTrap?.(a, m.prop);
+        this.missionDone = true;
+      }
+      return;
+    }
+    // normal perception: only pounce on a Past You this cat can actually see
+    if (distQ < 5.5 && Math.abs(q.position.y - a.position.y) < 0.8 && this.seenT < 0.3) {
       a.setForcedAction(null);
       if (this.tryPounce(w, distQ)) this.missionDone = true;
       else if (distQ < 3) this.moveTo(q.position, dt, w, true);

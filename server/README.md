@@ -1,18 +1,23 @@
-# Optional: Claude-powered Alley Council
+# Optional: Claude explanation layer for the Alley Council
 
-PURRADOX always works without this. By default, the **Tactical Director** that
-plans Round 2 ("THE ALLEY COUNCIL IS PLOTTING…") is a deterministic heuristic
-inside the game (`src/ai/TacticalFallback.ts`).
+PURRADOX always works without this. Round 2 is planned entirely inside the
+game: the **Counterfactual Simulator** (`src/ai/CounterfactualSimulator.ts`)
+fast-forwards hundreds of council plans against the recorded run, and the
+deterministic **Tactical Planner** (`src/ai/TacticalPlanner.ts`) picks and
+explains one.
 
-This tiny server lets Claude pick the strategy and write the council's line
-instead. It is a separate package, so the game itself has no AI dependency.
+This tiny server only lets Claude **name and explain** that already-chosen
+plan: a punchier strategy name, a one-sentence council line, short role
+wording and a taunt. It never picks the strategy, never moves cats and never
+decides frame-level actions. It is a separate package, so the game itself has
+no AI dependency.
 
 ## How it stays safe
 
-- The browser sends **only a compact numeric summary** of Round 1: run time, speed, sprint and elevated ratios, shortcut flags, hiss, pounce and drop counts, interaction ids, and seconds per zone. Nothing personal, and no free text.
+- The browser sends **only numbers and the chosen plan**: the behavior fingerprint (rounded), up to three scored candidates, the chosen plan's roles and zones, and a small telemetry summary. Nothing personal, no free text from the player.
 - The API key lives **only on the server** (environment variable or an `ant auth login` profile). Nothing secret is in the client bundle.
-- Claude answers through a **JSON schema** (`strategy` enum + `line` + `reasons`), and the answer is validated again both server-side and in the game (`parsePlan`).
-- The game requests the plan the moment the run ends, while the "RUN COMPLETE / RUN RECORDED" beats play. **Any timeout, error, refusal or invalid answer means the heuristic plan is used instantly.** Gameplay never waits on the network.
+- Claude answers through a **JSON schema** (`name`, `line`, `roles`, `taunt`), validated again server-side and in the game (`parseExplanation`), which also rejects markup and unknown cats.
+- The game asks the moment the run ends, while the end-of-run beats play. **Any timeout, error, refusal or invalid answer keeps the deterministic wording instantly.** Gameplay never waits on the network.
 - Strict origin allow-list (CORS) and an 8 KB request cap.
 
 ## Run it

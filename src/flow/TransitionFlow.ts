@@ -4,7 +4,7 @@ import { PALETTE } from "../data/palette";
 import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
 import { easeInOutCubic, formatClock } from "../core/math";
-import { heuristicPlan, type TacticalPlan } from "../ai/TacticalFallback";
+import type { CouncilPlan } from "../ai/TacticalPlanner";
 
 const SELECT_SPOTS: Array<[number, number, number]> = [
   [-18.0, 0, 11.3],
@@ -20,8 +20,7 @@ export function registerTransitionFlow(g: Game): void {
   let t = 0;
   let planShown = false;
   let profileShown = false;
-  let pending: Promise<TacticalPlan> | null = null;
-  let resolved: TacticalPlan | null = null;
+  let resolved: CouncilPlan | null = null;
   let streak: THREE.Mesh | null = null;
   let streakCount = 0;
   let head: THREE.Mesh | null = null;
@@ -36,9 +35,9 @@ export function registerTransitionFlow(g: Game): void {
       planShown = false;
       profileShown = false;
       resolved = null;
-      // The request was started when the run ended; reuse it.
-      pending = g.planRequest ?? g.director.analyze(g.telemetry.summary());
-      pending.then((p) => {
+      // The plan was computed when the run ended; the optional explanation
+      // layer may still be rewording it.
+      g.planRequest?.then((p) => {
         resolved = p;
       });
       g.stamps.place("high");
@@ -76,14 +75,15 @@ export function registerTransitionFlow(g: Game): void {
         g.audio.play("stamp", { volume: 0.5 });
       }
       const planAt = tag ? 2.9 : 1.3;
-      if (!resolved && t > planAt + 1.1) resolved = heuristicPlan(g.telemetry.summary());
+      // the deterministic plan is always ready; an explanation layer gets a beat longer
+      if (!resolved && g.plan && t > planAt + (g.director.enabled ? 1.2 : 0)) resolved = g.plan;
       if (resolved && !planShown && t > planAt) {
         planShown = true;
         g.plan = resolved;
         g.stamps.clear(false);
-        g.stamps.show(resolved.name, "strategy", false, resolved.line);
+        g.stamps.show(resolved.strategyName, "strategy", false, resolved.callout);
         g.audio.play("stamp", { volume: 0.6 });
-        g.debug?.log(`director (${resolved.source}): ${resolved.name} — ${resolved.reasons.join("; ")}`);
+        g.debug?.log(`plan (${resolved.source}): ${resolved.strategyName} — ${resolved.reason}`);
         t = planAt;
       }
       if (planShown && t > planAt + 1.9) g.fsm.transition(GameState.REWIND);

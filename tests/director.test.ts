@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { TelemetryTracker, type TelemetrySummary } from "../src/ai/TelemetrySummary";
-import { castAssignments, heuristicPlan, planFor, STRATEGY_IDS } from "../src/ai/TacticalFallback";
-import { TacticalDirector, compact, parsePlan, type StrategyProvider } from "../src/ai/TacticalDirector";
+import { deriveTags, fingerprint } from "../src/ai/BehaviorProfiler";
+import { analyzeTrace, simulateCounterfactuals } from "../src/ai/CounterfactualSimulator";
+import { applyExplanation, buildRequest, compact, parseExplanation, TacticalDirector, type StrategyProvider } from "../src/ai/TacticalDirector";
+import { planCouncil, planForAllies } from "../src/ai/TacticalPlanner";
+import { agents, graph, syntheticRun } from "./helpers";
 
 function summary(over: Partial<TelemetrySummary>): TelemetrySummary {
   return { ...TelemetryTracker.empty(), runDuration: 50, ...over };
@@ -41,95 +44,81 @@ describe("Telemetry", () => {
   });
 });
 
-describe("Tactical Director (deterministic heuristic)", () => {
-  it("answers a rooftop-heavy run with THE ROOFTOP TRAP", () => {
-    const p = heuristicPlan(summary({ elevatedRatio: 0.55 }));
-    expect(p.id).toBe("rooftop_trap");
-    expect(p.name).toBe("THE ROOFTOP TRAP");
-    expect(p.assignments.find((a) => a.cat === "soot")?.zones[0]).toBe("laundry");
+describe("Tactical Planner", () => {
+  const trace = analyzeTrace(syntheticRun(), graph);
+  const roofy = fingerprint(summary({ runDuration: 30, elevatedRatio: 0.63, averageSpeed: 7 }));
+  const sim = simulateCounterfactuals(trace, graph, agents(["mochi", "soot", "beans"]), roofy);
+  const plan = planCouncil(sim, roofy, deriveTags(roofy));
+
+  it("picks the simulator's best plan and explains it with evidence", () => {
+    expect(plan.strategyId).toBe(sim.best.id);
+    expect(plan.strategyName.length).toBeGreaterThan(3);
+    expect(plan.reason.length).toBeGreaterThan(10);
+    expect(plan.callout).toMatch(/^[A-Z' .!]+$/);
+    expect(plan.allyAssignments).toHaveLength(3);
+    expect(plan.candidates.length).toBe(3);
+    expect(plan.profile?.title).toBe("FAST ROOFTOP RUNNER");
+    expect(["early", "mid", "late"]).toContain(plan.pressureStyle);
   });
 
-  it("answers a fast run with THE RUSH", () => {
-    expect(heuristicPlan(summary({ averageSpeed: 7.2, sprintRatio: 0.8 })).id).toBe("the_rush");
+  it("can be forced to explain any simulated strategy", () => {
+    const forced = planCouncil(sim, roofy, [], "the_rush");
+    expect(forced.strategyId).toBe("the_rush");
+    expect(forced.callout).toBe("WE'LL MEET YOU EARLY.");
   });
 
-  it("answers a distraction-heavy run with THE BAIT", () => {
-    const i = { t: 1, x: 0, y: 0, z: 0, zone: "court", target: "pigeonFeed" };
-    expect(heuristicPlan(summary({ interactions: [i, { ...i, target: "trashCan" }] })).id).toBe("the_bait");
-  });
-
-  it("always assigns all three rivals", () => {
-    const p = heuristicPlan(summary({}));
-    expect(p.assignments.map((a) => a.cat).sort()).toEqual(["beans", "mochi", "soot"]);
+  it("re-plans the same strategy for whichever two allies are free", () => {
+    const a = planForAllies(trace, graph, agents(["fishcat", "beans"]), roofy, plan.strategyId);
+    expect(a.map((x) => x.cat).sort()).toEqual(["beans", "fishcat"]);
   });
 });
 
-describe("Tactical Director (optional provider)", () => {
-  it("accepts schema-valid provider output", () => {
-    const p = parsePlan({ strategy: "the_choke", line: "Wait at the narrow part.", reasons: ["alleys"] });
-    expect(p?.id).toBe("the_choke");
-    expect(p?.source).toBe("llm");
-    expect(p?.line).toBe("Wait at the narrow part.");
+describe("LLM explanation layer (optional)", () => {
+  const trace = analyzeTrace(syntheticRun(), graph);
+  const sim = simulateCounterfactuals(trace, graph, agents(["mochi", "soot", "beans"]), null);
+  const plan = planCouncil(sim, null, []);
+
+  it("accepts a valid explanation and only renames / rewords", () => {
+    const ex = parseExplanation({ name: "the roof is lava", line: "We know every roof you love.", roles: { soot: "Landing Guard" }, taunt: "Mrrp." });
+    expect(ex).not.toBeNull();
+    const out = applyExplanation(plan, ex!);
+    expect(out.strategyName).toBe("THE ROOF IS LAVA");
+    expect(out.strategyId).toBe(plan.strategyId);
+    expect(out.allyAssignments.map((a) => a.point)).toEqual(plan.allyAssignments.map((a) => a.point));
+    expect(out.source).toBe("llm");
   });
 
-  it("rejects unknown strategies and malformed answers", () => {
-    expect(parsePlan({ strategy: "nuke_the_cat" })).toBeNull();
-    expect(parsePlan("THE ROOFTOP TRAP")).toBeNull();
-    expect(parsePlan(null)).toBeNull();
+  it("rejects markup, oversized or unknown fields", () => {
+    expect(parseExplanation({ line: "<script>alert(1)</script>" })).toBeNull();
+    expect(parseExplanation({ name: "x".repeat(60) })).toBeNull();
+    expect(parseExplanation({ roles: { hacker: "ROOT" } })).toBeNull();
+    expect(parseExplanation("nope")).toBeNull();
   });
 
-  it("drops suspicious text lines but keeps the strategy", () => {
-    const p = parsePlan({ strategy: "the_rush", line: "<script>alert(1)</script>" });
-    expect(p?.id).toBe("the_rush");
-    expect(p?.line).not.toContain("<");
+  it("keeps the deterministic plan when the provider fails", async () => {
+    const failing: StrategyProvider = { name: "x", explain: async () => Promise.reject(new Error("down")) };
+    const out = await new TacticalDirector(failing, 200).explain(plan, buildRequest(plan, null, [], summary({})));
+    expect(out).toBe(plan);
   });
 
-  it("falls back to the heuristic when the provider fails", async () => {
-    const failing: StrategyProvider = { name: "fail", propose: async () => Promise.reject(new Error("offline")) };
-    const d = new TacticalDirector(failing, 200);
-    const plan = await d.analyze(summary({ elevatedRatio: 0.6 }));
-    expect(plan.source).toBe("heuristic");
-    expect(plan.id).toBe("rooftop_trap");
-  });
-
-  it("falls back to the heuristic when the provider times out", async () => {
+  it("keeps the deterministic plan when the provider times out", async () => {
     const slow: StrategyProvider = {
       name: "slow",
-      propose: (_s, signal) =>
-        new Promise((_res, rej) => {
-          signal.addEventListener("abort", () => rej(new Error("aborted")));
-        }),
+      explain: (_r, signal) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))),
     };
-    const d = new TacticalDirector(slow, 50);
     const t0 = Date.now();
-    const plan = await d.analyze(summary({}));
-    expect(plan.source).toBe("heuristic");
+    const out = await new TacticalDirector(slow, 150).explain(plan, buildRequest(plan, null, [], summary({})));
+    expect(out.source).toBe("counterfactual");
     expect(Date.now() - t0).toBeLessThan(1000);
   });
 
-  it("only sends a compact numeric summary", () => {
-    const c = compact(summary({ elevatedRatio: 0.333333 }));
-    expect(Object.keys(c).sort()).toEqual(["avgSpeed", "awningShortcut", "elevatedRatio", "fishDrops", "hisses", "interactions", "pounces", "rooftopShortcut", "runSeconds", "sprintRatio", "zoneSeconds"].sort());
-    expect(c.elevatedRatio).toBe(0.33);
-  });
-});
-
-describe("Role casting (any thief, any hunter)", () => {
-  it("keeps named cats in their slots and refills the rest by archetype", () => {
-    const plan = planFor("rooftop_trap", [], "heuristic");
-    // Thief = Soot, hunter = Beans: only Fish Cat and Mochi can help.
-    const cast = castAssignments(plan, ["fishcat", "mochi"]);
-    expect(cast.map((a) => a.cat).sort()).toEqual(["fishcat", "mochi"]);
-    expect(cast.find((a) => a.cat === "mochi")?.role).toBe("pressure");
-    // The ambush slot (the plan's first priority) goes to the opportunist.
-    expect(cast.find((a) => a.cat === "fishcat")?.role).toBe("ambush");
-  });
-
-  it("never casts a cat that is not available", () => {
-    for (const id of STRATEGY_IDS) {
-      const cast = castAssignments(planFor(id, [], "heuristic"), ["fishcat"]);
-      expect(cast).toHaveLength(1);
-      expect(cast[0].cat).toBe("fishcat");
-    }
+  it("only sends compact numbers and the already-chosen plan", () => {
+    const fp = fingerprint(summary({ elevatedRatio: 0.333333 }));
+    const req = buildRequest(plan, fp, deriveTags(fp), summary({ elevatedRatio: 0.333333 }));
+    expect(Object.values(req.fingerprint).every((v) => typeof v === "number")).toBe(true);
+    expect(req.telemetry.elevatedRatio).toBe(0.33);
+    expect(req.candidates.length).toBeLessThanOrEqual(3);
+    expect(JSON.stringify(req).length).toBeLessThan(4000);
+    expect(Object.keys(compact(summary({}))).sort()).toEqual(["avgSpeed", "awningShortcut", "elevatedRatio", "fishDrops", "hisses", "interactions", "pounces", "rooftopShortcut", "runSeconds", "sprintRatio", "zoneSeconds"].sort());
   });
 });

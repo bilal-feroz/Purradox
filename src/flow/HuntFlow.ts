@@ -6,9 +6,8 @@ import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
 import { formatClock } from "../core/math";
 import type { Mission } from "../cats/CatAI";
-import { zoneAt } from "../level/Zones";
-import type { ReplayData } from "../replay/ReplayTypes";
-import { castAssignments, heuristicPlan, type Assignment } from "../ai/TacticalFallback";
+import { Coordinator, type CoordMission } from "../ai/Coordinator";
+import { agentFor, planForAllies } from "../ai/TacticalPlanner";
 import { recordSteal } from "../ui/records";
 
 const HUNT_INTRO = 1.2;
@@ -22,50 +21,6 @@ const ECHO_DEEDS: Record<string, string> = {
 };
 /** Past You flashes its "!" this long before replaying a hiss or pounce. */
 const ECHO_TELL_LEAD = 0.3;
-
-/**
- * Turn the Alley Council's high-level plan into concrete ambush missions on
- * Past You's ACTUAL recorded route: find when the recording enters each
- * preferred zone and send the helper there early enough to be waiting.
- */
-export function planMissions(g: Game, a: Assignment, replay: ReplayData): Mission[] {
-  const cat = a.cat;
-  const snaps = replay.snapshots;
-  const missions: Mission[] = [];
-  const helper = g.actors[cat];
-  const start = new THREE.Vector3(...SPAWN.hunters[cat].pos);
-  const speed = helper.stats.sprintSpeed * 0.85;
-  const used = new Set<string>();
-  const tryZone = (zoneId: string | null, progress: number): void => {
-    let idx = -1;
-    if (zoneId) {
-      idx = snaps.findIndex((s) => s.grounded && zoneAt(s.position[0], s.position[1], s.position[2])?.id === zoneId);
-    }
-    if (idx < 0) idx = Math.min(snaps.length - 1, Math.floor(progress * snaps.length));
-    // walk forward until the helper can plausibly arrive first
-    for (let k = idx; k < snaps.length; k += 3) {
-      const s = snaps[k];
-      if (!s.grounded) continue;
-      const p = new THREE.Vector3(s.position[0], s.position[1], s.position[2]);
-      const from = g.graph.nearest(start.x, start.y, start.z);
-      const to = g.graph.nearest(p.x, p.y, p.z);
-      const travel = g.graph.pathLength(g.graph.path(from, to)) / speed + 1.2;
-      if (travel < s.t - 0.5 || k > idx + 120) {
-        const z = zoneAt(p.x, p.y, p.z);
-        const key = `${Math.round(p.x)}:${Math.round(p.z)}`;
-        if (used.has(key)) return;
-        used.add(key);
-        missions.push({ point: p, arriveAt: s.t, zone: z?.id ?? "", role: a.role });
-        start.copy(p);
-        return;
-      }
-    }
-  };
-  tryZone(a.zones[0] ?? null, a.fallbackProgress);
-  if (a.zones[1]) tryZone(a.zones[1], Math.min(0.95, a.fallbackProgress + 0.25));
-  missions.sort((m1, m2) => m1.arriveAt - m2.arriveAt);
-  return missions;
-}
 
 /** HUNT → HUNT_COMPLETE → RESULTS */
 export function registerHuntFlow(g: Game): void {
@@ -111,21 +66,31 @@ export function registerHuntFlow(g: Game): void {
       const hs = SPAWN.hunters[hunterId];
       hunter.teleport(new THREE.Vector3(...hs.pos), hs.yaw);
       g.controlled = hunter;
-      // Allies (the two cats that are neither thief nor hunter) take the
-      // Alley Council's roles.
-      const plan = g.plan ?? heuristicPlan(g.telemetry.summary());
-      g.plan = plan;
+      // Allies (the two cats that are neither thief nor hunter) execute the
+      // council's strategy: re-planned for exactly these two cats, then run
+      // by the Multi-Agent Coordinator with discrete re-planning.
       const allies = g.others().filter((c) => c !== hunter);
-      for (const a of castAssignments(plan, allies.map((c) => c.id))) {
-        const brain = g.brains[a.cat];
+      const allyAgents = allies.map((c) => agentFor(c.id));
+      const coord = g.trace ? new Coordinator(g.trace, g.graph) : null;
+      g.coordinator = coord;
+      const missions: CoordMission[] =
+        coord && g.trace && g.plan ? coord.start(planForAllies(g.trace, g.graph, allyAgents, g.fingerprint, g.plan.strategyId), allyAgents) : [];
+      const toMission = (m: CoordMission): Mission => ({ point: new THREE.Vector3(...m.point), arriveAt: m.arriveAt, zone: m.zone, role: m.role, prop: m.prop });
+      for (const ally of allies) {
+        const brain = g.brains[ally.id];
         brain.enabled = true;
-        const ally = g.actors[a.cat];
-        const s = SPAWN.hunters[a.cat];
+        const s = SPAWN.hunters[ally.id];
         ally.teleport(new THREE.Vector3(...s.pos), s.yaw);
         ally.setForcedAction(null);
         brain.echoTime = () => g.echo.time;
-        brain.setMissions(planMissions(g, a, replay));
-        g.debug?.log(`${a.cat} (${a.role}) missions: ${brain.missions.map((m) => `${m.zone}@${m.arriveAt.toFixed(1)}s`).join(", ")}`);
+        const m = missions.find((x) => x.cat === ally.id);
+        brain.setMissions(m ? [toMission(m)] : []);
+        brain.onMissionEnded = (b) => {
+          const next = coord?.missionEnded(b.id, b.actor.position, g.echo.time);
+          if (next) b.setMissions([toMission(next)]);
+        };
+        brain.onTrap = (cat, prop) => g.trapPastYou(cat, prop);
+        g.debug?.log(`${ally.id}: ${m ? `${m.role} at ${m.zone} (${m.arriveAt.toFixed(1)}s)` : "shadow"}`);
       }
       // Rules
       g.fish.reservedFor = pastYou;

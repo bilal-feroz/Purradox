@@ -1,10 +1,12 @@
-// PURRADOX — optional Alley Council server.
+// PURRADOX — optional Alley Council explanation layer.
 //
-// The browser game can ask this endpoint for a Round 2 counter-strategy.
-// It only ever receives a compact numeric telemetry summary, asks Claude
-// for a schema-constrained JSON answer, validates it, and returns it.
-// The game treats any error, timeout or odd answer as "use the built-in
-// deterministic director" — gameplay never waits on this server.
+// The game always plans Round 2 by itself: a Counterfactual Simulator
+// fast-forwards hundreds of council plans against the recorded run and a
+// deterministic Tactical Planner picks one. This endpoint may only NAME and
+// EXPLAIN that already-chosen plan (one sentence, short role wording, a
+// council taunt). It never picks strategies, never moves cats and is never
+// required: the game treats any error, timeout or odd answer as "keep the
+// deterministic wording".
 //
 // Credentials come from the environment (ANTHROPIC_API_KEY, or an
 // `ant auth login` profile). Nothing secret ever reaches the browser.
@@ -19,95 +21,100 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173,h
   .filter(Boolean);
 const MODEL = "claude-opus-5-5";
 const MAX_BODY_BYTES = 8 * 1024;
+const CATS = ["fishcat", "mochi", "soot", "beans"];
 
-const STRATEGIES = ["rooftop_trap", "the_choke", "the_rush", "the_bait", "shortcut_snare", "the_patient_wall"];
-
-const PLAN_SCHEMA = {
+const EXPLAIN_SCHEMA = {
   type: "object",
   properties: {
-    strategy: { type: "string", enum: STRATEGIES },
+    name: { type: "string" },
     line: { type: "string" },
-    reasons: { type: "array", items: { type: "string" } },
+    roles: {
+      type: "object",
+      properties: Object.fromEntries(CATS.map((c) => [c, { type: "string" }])),
+      additionalProperties: false,
+    },
+    taunt: { type: "string" },
   },
-  required: ["strategy", "line", "reasons"],
+  required: ["name", "line", "roles", "taunt"],
   additionalProperties: false,
 };
 
-const SYSTEM = `You are the Alley Council: three scheming street cats (Mochi the sprinter, Soot the ambusher, Beans the chaos kitten) in the cozy game PURRADOX.
-A player just escaped across Sardine Street with a stolen fish. You receive a JSON summary of HOW they played Round 1. In Round 2 the cats will hunt a perfect replay of that exact run.
-Pick exactly ONE counter-strategy:
-- rooftop_trap: the player spent lots of time off the ground or used the rooftop shortcut.
-- shortcut_snare: the player used the awning shortcut, so the council waits where it comes out.
-- the_bait: the player used distractions (pigeon feed, trash can, scraps, laundry).
-- the_rush: the player was fast and sprint-heavy.
-- the_choke: the player funneled through the narrow alleys.
-- the_patient_wall: the player hissed a lot, so the council will wait the hisses out.
-"line": one playful sentence, at most 110 characters, in the council's voice, telling the player what is coming. No markup.
-"reasons": one to three short reasons, each quoting a number from the telemetry.`;
+const SYSTEM = `You are the voice of the Alley Council: scheming street cats (Fish Cat, Mochi, Soot, Beans) in the cozy game PURRADOX.
+A player just escaped across Sardine Street with a stolen fish. In Round 2 the council hunts a perfect replay of that exact run.
+The game has ALREADY chosen the council's plan by simulating many options against the recorded run. You do not change it.
+You receive: the player's behavior fingerprint (numbers), up to three scored candidate strategies, the chosen plan with each cat's role and zone, and a small telemetry summary.
+Reply with:
+- "name": a punchy uppercase name for the chosen plan, 3-32 characters, letters/spaces/apostrophes only (keep the spirit of the given name).
+- "line": ONE playful sentence, at most 110 characters, in the council's voice, that cites one real number from the fingerprint or telemetry. No markup.
+- "roles": for each cat in the chosen plan, 1-3 uppercase words describing its job (e.g. "LANDING GUARD"). Only cats listed in the plan.
+- "taunt": a short council taunt, at most 80 characters. No markup.`;
 
 const client = new Anthropic({ maxRetries: 0, timeout: 9_000 });
 
-/** Accept only the small, flat, numeric summary the game sends. */
-function readTelemetry(raw) {
-  if (!raw || typeof raw !== "object" || typeof raw.telemetry !== "object" || raw.telemetry === null) return null;
-  const t = raw.telemetry;
+/** Accept only the small, flat request the game sends. */
+function readRequest(raw) {
+  if (!raw || typeof raw !== "object" || typeof raw.request !== "object" || raw.request === null) return null;
+  const r = raw.request;
   const num = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v * 100) / 100 : 0);
-  const bool = (v) => v === true;
-  const zoneSeconds = {};
-  if (t.zoneSeconds && typeof t.zoneSeconds === "object") {
-    for (const [k, v] of Object.entries(t.zoneSeconds).slice(0, 16)) {
-      if (/^[a-z0-9]{1,12}$/.test(k)) zoneSeconds[k] = num(v);
-    }
+  const str = (v, max) => (typeof v === "string" ? v.replace(/[<>{}]/g, "").slice(0, max) : "");
+  const fingerprint = {};
+  if (r.fingerprint && typeof r.fingerprint === "object") {
+    for (const [k, v] of Object.entries(r.fingerprint).slice(0, 24)) if (/^[a-zA-Z]{1,24}$/.test(k)) fingerprint[k] = num(v);
   }
-  const interactions = Array.isArray(t.interactions)
-    ? t.interactions.filter((s) => typeof s === "string" && /^[a-zA-Z]{1,16}$/.test(s)).slice(0, 12)
+  const tags = Array.isArray(r.tags) ? r.tags.filter((t) => typeof t === "string").slice(0, 3).map((t) => str(t, 32)) : [];
+  const candidates = Array.isArray(r.candidates)
+    ? r.candidates.slice(0, 3).map((c) => ({ id: str(c?.id, 24), name: str(c?.name, 32), score: num(c?.score), windows: num(c?.windows), earliest: num(c?.earliest), coverage: num(c?.coverage) }))
     : [];
-  return {
-    runSeconds: num(t.runSeconds),
-    avgSpeed: num(t.avgSpeed),
-    sprintRatio: num(t.sprintRatio),
-    elevatedRatio: num(t.elevatedRatio),
-    awningShortcut: bool(t.awningShortcut),
-    rooftopShortcut: bool(t.rooftopShortcut),
-    pounces: num(t.pounces),
-    hisses: num(t.hisses),
-    interactions,
-    fishDrops: num(t.fishDrops),
-    zoneSeconds,
+  const ch = r.chosen && typeof r.chosen === "object" ? r.chosen : null;
+  if (!ch) return null;
+  const chosen = {
+    id: str(ch.id, 24),
+    name: str(ch.name, 32),
+    reason: str(ch.reason, 200),
+    roles: Array.isArray(ch.roles) ? ch.roles.slice(0, 3).filter((x) => CATS.includes(x?.cat)).map((x) => ({ cat: x.cat, role: str(x.role, 24), zone: str(x.zone, 32) })) : [],
   };
+  const t = r.telemetry && typeof r.telemetry === "object" ? r.telemetry : {};
+  const telemetry = { runSeconds: num(t.runSeconds), avgSpeed: num(t.avgSpeed), sprintRatio: num(t.sprintRatio), elevatedRatio: num(t.elevatedRatio), pounces: num(t.pounces), hisses: num(t.hisses), fishDrops: num(t.fishDrops) };
+  return { fingerprint, tags, candidates, chosen, telemetry };
 }
 
-function validPlan(p) {
+function validExplanation(p, chosenCats) {
   return (
     p &&
     typeof p === "object" &&
-    STRATEGIES.includes(p.strategy) &&
+    typeof p.name === "string" &&
+    /^[A-Z0-9 '!.-]{3,32}$/.test(p.name.trim().toUpperCase()) &&
     typeof p.line === "string" &&
     p.line.length > 0 &&
-    p.line.length <= 140 &&
+    p.line.length <= 120 &&
     !/[<>{}]/.test(p.line) &&
-    Array.isArray(p.reasons) &&
-    p.reasons.every((r) => typeof r === "string" && r.length <= 120)
+    typeof p.taunt === "string" &&
+    p.taunt.length <= 90 &&
+    !/[<>{}]/.test(p.taunt) &&
+    p.roles &&
+    typeof p.roles === "object" &&
+    Object.entries(p.roles).every(([k, v]) => chosenCats.includes(k) && typeof v === "string" && v.length <= 24)
   );
 }
 
-async function askCouncil(telemetry) {
+async function explainPlan(request) {
   const response = await client.beta.messages.create({
     model: MODEL,
     max_tokens: 4096,
     // Server-side fallback if a safety classifier ever declines.
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    output_config: { effort: "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
+    output_config: { effort: "low", format: { type: "json_schema", schema: EXPLAIN_SCHEMA } },
     system: SYSTEM,
-    messages: [{ role: "user", content: `Round 1 telemetry:\n${JSON.stringify(telemetry)}` }],
+    messages: [{ role: "user", content: `Council briefing:\n${JSON.stringify(request)}` }],
   });
   if (response.stop_reason === "refusal") throw new Error("council declined");
   const text = response.content.find((b) => b.type === "text")?.text;
   if (!text) throw new Error("no text block");
-  const plan = JSON.parse(text);
-  if (!validPlan(plan)) throw new Error("plan failed validation");
-  return { strategy: plan.strategy, line: plan.line.trim(), reasons: plan.reasons.slice(0, 3) };
+  const out = JSON.parse(text);
+  const cats = request.chosen.roles.map((r) => r.cat);
+  if (!validExplanation(out, cats)) throw new Error("explanation failed validation");
+  return { name: out.name.trim(), line: out.line.trim(), roles: out.roles, taunt: out.taunt.trim() };
 }
 
 function send(res, status, body, origin) {
@@ -158,24 +165,23 @@ const server = http.createServer((req, res) => {
   });
   req.on("end", async () => {
     if (res.writableEnded) return;
-    let telemetry;
+    let request;
     try {
-      telemetry = readTelemetry(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      request = readRequest(JSON.parse(Buffer.concat(chunks).toString("utf8")));
     } catch {
-      telemetry = null;
+      request = null;
     }
-    if (!telemetry) {
-      send(res, 400, { error: "bad telemetry" }, origin);
+    if (!request) {
+      send(res, 400, { error: "bad request" }, origin);
       return;
     }
     try {
-      const plan = await askCouncil(telemetry);
-      send(res, 200, plan, origin);
+      send(res, 200, await explainPlan(request), origin);
     } catch (err) {
       if (err instanceof Anthropic.RateLimitError) console.warn("[council] rate limited");
       else if (err instanceof Anthropic.APIError) console.warn(`[council] API error ${err.status}`);
       else console.warn(`[council] ${err instanceof Error ? err.message : "error"}`);
-      // The game falls back to its deterministic director on any non-200.
+      // The game keeps its deterministic wording on any non-200.
       send(res, 502, { error: "council unavailable" }, origin);
     }
   });
