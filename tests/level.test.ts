@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV_EDGES, NAV_NODES, SPAWN, ZONES } from "../src/data/level";
+import { ESCAPE_POINTS, NAV_EDGES, NAV_NODES, SPAWN, ZONES } from "../src/data/level";
 import { WaypointGraph } from "../src/level/WaypointGraph";
 import { isElevated, zoneAt } from "../src/level/Zones";
 
@@ -16,6 +16,12 @@ describe("Sardine Street layout data", () => {
   it("puts the start in the Fish Market and the goal on the Safe Rooftop", () => {
     expect(zoneAt(...SPAWN.runner.pos)?.id).toBe("market");
     expect(zoneAt(SPAWN.goal[0], SPAWN.goal[1] + 0.1, SPAWN.goal[2])?.index).toBe(8);
+  });
+
+  it("puts every escape point and AI post inside a zone", () => {
+    for (const e of ESCAPE_POINTS) expect(zoneAt(...e.pos), e.id).toBeTruthy();
+    for (const p of Object.values(SPAWN.ai)) expect(zoneAt(...p.pos)).toBeTruthy();
+    for (const p of Object.values(SPAWN.hunters)) expect(zoneAt(...p.pos)).toBeTruthy();
   });
 
   it("orders the eight zones like the blueprint", () => {

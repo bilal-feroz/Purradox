@@ -21,6 +21,7 @@ export type AIState =
   | "ESCAPE_WITH_FISH"
   | "AMBUSH"
   | "RETURN"
+  | "SEARCH"
   | "MISSION";
 
 export interface AIWorld {
@@ -60,24 +61,32 @@ interface Personality {
   aimError: number;
   /** How far away a loose fish pulls this cat off its plan (m). */
   fishSense: number;
+  /** Vision range (m); the field of view is the same for every cat. */
+  viewRange: number;
 }
 
 /** AI personalities by archetype (any cat that is not the thief uses its own). */
 const PERSONALITY: Record<Archetype, Personality> = {
   // Mochi: fast direct pursuit, early pressure, frequent predictable pounces.
-  sprinter: { archetype: "sprinter", chaseSprint: true, pounceRange: 3.3, pounceChance: 0.9, pounceCooldown: 2.4, leash: 34, maxZone: 4, hissBackChance: 0.12, notice: 0.45, speedR1: 0.9, aimError: 0.16, fishSense: 16 },
+  sprinter: { archetype: "sprinter", chaseSprint: true, pounceRange: 3.3, pounceChance: 0.9, pounceCooldown: 2.4, leash: 34, maxZone: 4, hissBackChance: 0.12, notice: 0.45, speedR1: 0.9, aimError: 0.16, fishSense: 16, viewRange: 22 },
   // Soot: holds chokepoints and landing zones ahead of the thief.
-  ambusher: { archetype: "ambusher", chaseSprint: true, pounceRange: 4.4, pounceChance: 0.85, pounceCooldown: 3.0, leash: 18, maxZone: 6, hissBackChance: 0.4, notice: 0.25, speedR1: 0.9, aimError: 0.12, fishSense: 16 },
+  ambusher: { archetype: "ambusher", chaseSprint: true, pounceRange: 4.4, pounceChance: 0.85, pounceCooldown: 3.0, leash: 18, maxZone: 6, hissBackChance: 0.4, notice: 0.25, speedR1: 0.9, aimError: 0.12, fishSense: 16, viewRange: 24 },
   // Beans: props, distractions, odd routes, less direct pressure.
-  chaos: { archetype: "chaos", chaseSprint: true, pounceRange: 2.9, pounceChance: 0.55, pounceCooldown: 2.6, leash: 22, maxZone: 8, hissBackChance: 0.22, notice: 0.3, speedR1: 0.92, aimError: 0.34, fishSense: 16 },
+  chaos: { archetype: "chaos", chaseSprint: true, pounceRange: 2.9, pounceChance: 0.55, pounceCooldown: 2.6, leash: 22, maxZone: 8, hissBackChance: 0.22, notice: 0.3, speedR1: 0.92, aimError: 0.34, fishSense: 16, viewRange: 20 },
   // Fish Cat: balanced, shortcut-aware route cutter, first to any dropped fish.
-  opportunist: { archetype: "opportunist", chaseSprint: true, pounceRange: 3.4, pounceChance: 0.72, pounceCooldown: 2.6, leash: 26, maxZone: 7, hissBackChance: 0.25, notice: 0.35, speedR1: 0.9, aimError: 0.2, fishSense: 26 },
+  opportunist: { archetype: "opportunist", chaseSprint: true, pounceRange: 3.4, pounceChance: 0.72, pounceCooldown: 2.6, leash: 26, maxZone: 7, hissBackChance: 0.25, notice: 0.35, speedR1: 0.9, aimError: 0.2, fishSense: 26, viewRange: 22 },
 };
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _knee = new THREE.Vector3();
+/** Half field of view (radians): cats see ~130 degrees ahead. */
+const HALF_FOV = (65 * Math.PI) / 180;
+/** Within this range a cat senses the quarry in any direction. */
+const AWARE_RADIUS = 3.5;
+/** Seconds a cat keeps chasing a quarry it can no longer see or hear. */
+const MEMORY = 2.5;
 /** How loud (0..1) a sound must be before each archetype goes to investigate. */
 const CURIOSITY: Record<Archetype, number> = { chaos: 0.15, opportunist: 0.3, sprinter: 0.45, ambusher: 0.65 };
 const _knee2 = new THREE.Vector3();
@@ -123,6 +132,15 @@ export class RivalBrain {
   helper = false;
   private sawPickup = false;
   private interactCooldown = 0;
+  // ---- perception: vision + short memory (never omniscient)
+  /** Seconds since the quarry was last seen or heard. */
+  seenT = 99;
+  /** Where the quarry was when last perceived, and how it was moving. */
+  readonly lastSeen = new THREE.Vector3();
+  private readonly lastSeenVel = new THREE.Vector3();
+  private visionT = 0;
+  private visible = false;
+  private searchLook = 0;
   /** Hearing: a brief look toward a sound. */
   private glanceT = 0;
   private readonly glancePoint = new THREE.Vector3();
@@ -159,6 +177,9 @@ export class RivalBrain {
     this.escaped = false;
     this.glanceT = 0;
     this.lastDistQ = 99;
+    this.seenT = 99;
+    this.visionT = 0;
+    this.visible = false;
     this.sawPickup = false;
     this.helper = false;
     this.enabled = true;
@@ -217,8 +238,9 @@ export class RivalBrain {
     const fish = w.fish;
     const distQ = Math.hypot(q.position.x - a.position.x, q.position.z - a.position.z);
     this.lastDistQ = distQ;
+    this.perceive(dt, w, distQ);
     if (this.glanceT > 0) this.glanceT -= dt;
-    a.lookTarget = this.glanceT > 0 ? this.glancePoint : distQ < 12 ? q.center(_knee2) : null;
+    a.lookTarget = this.glanceT > 0 ? this.glancePoint : distQ < 12 && this.seenT < 0.5 ? q.center(_knee2) : null;
 
     // Hissed at: back away for the hesitation window.
     if (a.hesitateT > 0) {
@@ -279,10 +301,13 @@ export class RivalBrain {
           this.go("IDLE");
           a.setForcedAction(this.p.archetype === "ambusher" ? "crouch" : "sit");
         }
-        if (distQ < 7 && w.quarryZone <= this.p.maxZone) this.go("CHASE");
+        if (distQ < 7 && this.seenT < 0.3 && w.quarryZone <= this.p.maxZone) this.go("CHASE");
         break;
       case "MISSION":
         this.updateMission(dt, w, distQ);
+        break;
+      case "SEARCH":
+        this.updateSearch(dt, w);
         break;
       case "POUNCE":
         if (a.abilities.pounceState === "idle") this.go("RECOVER");
@@ -292,24 +317,24 @@ export class RivalBrain {
 
   private updateIdle(dt: number, w: AIWorld, distQ: number): void {
     const a = this.actor;
-    const fish = w.fish;
     if (w.round === 2) return;
-    const qCarrying = fish.owner === w.quarry;
-    if (qCarrying && !this.sawPickup) this.sawPickup = true;
+    if (this.glanceT > 0) this.faceToward(this.glancePoint);
+    // (sawPickup is set by hearing the fishmonger's bell, not by magic)
+    const sees = this.seenT < 0.3;
     switch (this.p.archetype) {
       case "sprinter":
-        if ((this.sawPickup && distQ < 26) || distQ < 7) this.go("NOTICE");
+        if (sees && ((this.sawPickup && distQ < 26) || distQ < 7)) this.go("NOTICE");
         break;
       case "ambusher":
         if (this.sawPickup && w.quarryZone >= 3) this.go("AMBUSH");
         break;
       case "opportunist":
         // waits between both routes; moves once the thief is within reach
-        if ((this.sawPickup && distQ < this.p.leash - 2) || distQ < 8) this.go("NOTICE");
+        if (sees && ((this.sawPickup && distQ < this.p.leash - 2) || distQ < 8)) this.go("NOTICE");
         break;
       default:
         // chaos: wanders the rooftops looking for trouble
-        if (this.sawPickup && (w.quarryZone >= 5 || distQ < 14)) this.go("CHASE");
+        if (this.sawPickup && (w.quarryZone >= 5 || (sees && distQ < 14))) this.go("CHASE");
         else this.wander(dt, w, 6);
     }
     void a;
@@ -343,11 +368,17 @@ export class RivalBrain {
       } else this.go("RETURN");
       return;
     }
+    // Lost sight (and sound) of the thief for too long: go and look.
+    if (w.round === 1 && this.seenT > MEMORY) {
+      this.go("SEARCH");
+      return;
+    }
     // Opportunists cut the route: aim far ahead of the thief and let the
     // waypoint graph find the shortcut; close in normally once near.
     const cutting = this.p.archetype === "opportunist" && distQ > 7;
     const lead = cutting ? Math.min(2.4, distQ / 5) : Math.min(0.6, distQ / 9);
-    w.predict(lead, _p);
+    if (this.seenT < 0.2) w.predict(lead, _p);
+    else this.believed(_p);
     // Chaos cats orbit instead of charging straight in.
     if (this.p.archetype === "chaos" && distQ < 6 && distQ > 2.4) {
       const ang = Math.atan2(a.position.x - q.position.x, a.position.z - q.position.z) + dt * 2.2;
@@ -550,6 +581,12 @@ export class RivalBrain {
         // the flock explodes around them: everyone flinches and hesitates
         if (loud > 0.12 && this.state !== "POUNCE") this.distract(1.4 + loud * 1.4, p, "pigeons");
         return;
+      case "bell":
+        // the fishmonger's bell: the whole alley now knows the fish is gone,
+        // and every idle cat turns to look at the market
+        this.sawPickup = true;
+        this.glance(p, 2.5);
+        return;
       case "fishDrop":
       case "catHiss":
         this.glance(p, 0.8);
@@ -570,6 +607,82 @@ export class RivalBrain {
         }
         this.distract(1.2 + loud * 2.2, p, "noise");
       }
+    }
+  }
+
+  /** Vision (range, field of view, line of sight) feeding a short memory. */
+  private perceive(dt: number, w: AIWorld, distQ: number): void {
+    const a = this.actor;
+    const q = w.quarry;
+    this.seenT += dt;
+    this.visionT -= dt;
+    if (this.visionT <= 0) {
+      // eyes are cheap but not free: re-check a few times a second
+      this.visionT = 0.12;
+      this.visible = false;
+      if (q.active && distQ <= this.p.viewRange && Math.abs(q.position.y - a.position.y) < 6) {
+        let inView = distQ < AWARE_RADIUS;
+        if (!inView) {
+          // eyes follow the head: a glance or a tracked target sets the view
+          let fx = Math.sin(a.yaw);
+          let fz = Math.cos(a.yaw);
+          const look = a.lookTarget;
+          if (look) {
+            const lx = look.x - a.position.x;
+            const lz = look.z - a.position.z;
+            const ll = Math.hypot(lx, lz);
+            if (ll > 0.3) {
+              fx = lx / ll;
+              fz = lz / ll;
+            }
+          }
+          inView = ((q.position.x - a.position.x) * fx + (q.position.z - a.position.z) * fz) / Math.max(distQ, 1e-3) >= Math.cos(HALF_FOV);
+        }
+        if (inView) {
+          _knee.copy(a.position).setY(a.position.y + 0.5);
+          _knee2.copy(q.position).setY(q.position.y + 0.45);
+          this.visible = w.physics.lineOfSight(_knee, _knee2);
+        }
+      }
+    }
+    if (this.visible) this.remember(q.position, q.velocity);
+  }
+
+  private remember(p: THREE.Vector3, v: THREE.Vector3): void {
+    this.seenT = 0;
+    this.lastSeen.copy(p);
+    this.lastSeenVel.copy(v).setY(0);
+  }
+
+  /** Heard the quarry's paws nearby (sprinting cats aren't subtle). */
+  hearQuarry(p: THREE.Vector3, v: THREE.Vector3): void {
+    if (!this.enabled || this.actor.mode !== "ai") return;
+    if (this.seenT > 0.1) this.remember(p, v);
+  }
+
+  /** Where this cat believes the quarry is: last sighting, extrapolated briefly. */
+  private believed(out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.lastSeen).addScaledVector(this.lastSeenVel, Math.min(this.seenT, 1));
+  }
+
+  /** Go to the last known position, look around, then give up. */
+  private updateSearch(dt: number, w: AIWorld): void {
+    const a = this.actor;
+    if (this.seenT < 0.2) {
+      this.go(this.p.archetype === "opportunist" ? "INTERCEPT" : "CHASE");
+      return;
+    }
+    const d = this.moveTo(this.lastSeen, dt, w, this.stateT < 2, 0.8);
+    if (d < 1.2 || this.stateT > 3.5) {
+      a.intent.moveX = 0;
+      a.intent.moveZ = 0;
+      // look left, look right...
+      this.searchLook += dt;
+      a.movement.yaw += Math.sin(this.searchLook * 2.4) * dt * 2.2;
+    }
+    if (this.stateT > 5.5) {
+      this.searchLook = 0;
+      this.go(this.p.archetype === "ambusher" ? "AMBUSH" : "RETURN");
     }
   }
 

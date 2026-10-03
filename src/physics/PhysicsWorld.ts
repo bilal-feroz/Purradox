@@ -119,13 +119,18 @@ export class PhysicsWorld {
     return hit ? hit.point.y : null;
   }
 
-  /** True if a straight segment between two points is free of static geometry. */
+  /**
+   * True if a straight segment between two points is free of static
+   * geometry. The ends are trimmed a little so a cat leaning against a
+   * crate or wall isn't blinded by the prop it is touching.
+   */
   lineOfSight(a: THREE.Vector3, b: THREE.Vector3): boolean {
     const d = new THREE.Vector3().subVectors(b, a);
     const len = d.length();
-    if (len < 1e-4) return true;
+    if (len < 0.7) return true;
     d.divideScalar(len);
-    return this.raycast(a, d, len) === null;
+    const start = new THREE.Vector3().copy(a).addScaledVector(d, 0.3);
+    return this.raycast(start, d, len - 0.6) === null;
   }
 
   removeCollider(c: RAPIER.Collider): void {

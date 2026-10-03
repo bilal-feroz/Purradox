@@ -389,6 +389,10 @@ export class Game {
       }
     });
     this.bus.on("fishPickup", (e) => {
+      // Stealing from the stall rings the fishmonger's bell: the whole alley knows.
+      if (this.round === 1 && e.cat === this.runnerId && !e.recovered && !e.stolen && this.fsm.is(GameState.FISH_RUN)) {
+        this.bus.emit("sound", { type: "bell", x: e.x, y: e.y, z: e.z, radius: 220, intensity: 1, source: "world" });
+      }
       if (e.cat === this.runnerId && isRunRecording()) this.recorder.event(this.runTime, "fishPickup", undefined, snap);
       // Alerts
       const byRunner = e.cat === this.runnerId;
@@ -431,6 +435,17 @@ export class Game {
       if (this.round === 2 && this.controlled && e.hisser === this.controlled.id) this.huntStats.perfectHisses++;
       if (this.round === 2 && e.hisser === this.runnerId) this.huntStats.echoPerfectHisses++;
       if (this.round === 1 && e.hisser === this.runnerId) this.huntStats.perfectHisses++;
+    });
+    // The thief's paws give it away to cats close by (sprinting is louder).
+    this.bus.on("footstep", (e) => {
+      if (e.cat !== this.runnerId) return;
+      const r = this.runner;
+      const reach = e.sprint ? 9 : 5;
+      for (const c of this.cats) {
+        if (c.mode === "ai" && Math.hypot(c.position.x - e.x, c.position.z - e.z) < reach && Math.abs(c.position.y - e.y) < 2) {
+          this.brains[c.id].hearQuarry(r.position, r.velocity);
+        }
+      }
     });
     // AI hearing: every game-driven cat within earshot decides how to react
     this.bus.on("sound", (e) => {

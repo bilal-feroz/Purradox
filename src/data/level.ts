@@ -67,7 +67,8 @@ export const SPAWN = {
   /** Round 1 posts for AI-controlled cats, flavored by archetype. */
   ai: {
     fishcat: { pos: [15, 2.2, -12.4] as V3, yaw: 0.3 },
-    mochi: { pos: [-7.5, 0, 9.6] as V3, yaw: -Math.PI * 0.75 },
+    // in front of the corner house, watching the fish stall
+    mochi: { pos: [-8.5, 0, 13.4] as V3, yaw: -1.4 },
     soot: { pos: [3, 2.2, -33] as V3, yaw: Math.PI * 0.9 },
     beans: { pos: [27, 5.0, -57] as V3, yaw: Math.PI * 0.6 },
   } as Record<CatId, { pos: V3; yaw: number }>,
@@ -99,7 +100,7 @@ export const ESCAPE_POINTS: Array<{ id: string; label: string; pos: V3 }> = [
   { id: "market_gate", label: "the market gate", pos: [-24, 0, 20.5] },
   { id: "side_passage", label: "the side passage", pos: [5, 1.0, 9.5] },
   { id: "court_gap", label: "the courtyard gap", pos: [30, 2.2, -15] },
-  { id: "alley_end", label: "the alley drainpipe", pos: [-2.6, 3.6, -62] },
+  { id: "alley_end", label: "the alley drainpipe", pos: [-1, 3.6, -60] },
   { id: "roof_hatch", label: "the roof hatch", pos: [26, 5.0, -40] },
   { id: "far_roof", label: "the far roof edge", pos: [41.5, 5.0, -58] },
 ];
