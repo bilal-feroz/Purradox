@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { CATS, type Archetype, type CatId } from "../data/cats";
 import { AMBUSH_SPOTS, ESCAPE_POINTS, SPAWN, type V3 } from "../data/level";
 import { Random } from "../core/Random";
+import type { GameEvents } from "../core/EventBus";
 import type { FishSystem } from "../fish/Fish";
 import type { NavNode, WaypointGraph } from "../level/WaypointGraph";
 import type { PhysicsWorld } from "../physics/PhysicsWorld";
@@ -77,6 +78,8 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _knee = new THREE.Vector3();
+/** How loud (0..1) a sound must be before each archetype goes to investigate. */
+const CURIOSITY: Record<Archetype, number> = { chaos: 0.15, opportunist: 0.3, sprinter: 0.45, ambusher: 0.65 };
 const _knee2 = new THREE.Vector3();
 
 /**
@@ -120,6 +123,10 @@ export class RivalBrain {
   helper = false;
   private sawPickup = false;
   private interactCooldown = 0;
+  /** Hearing: a brief look toward a sound. */
+  private glanceT = 0;
+  private readonly glancePoint = new THREE.Vector3();
+  private lastDistQ = 99;
   onWantInteract: ((cat: CatActor) => void) | null = null;
 
   constructor(
@@ -150,6 +157,8 @@ export class RivalBrain {
     this.missionDone = false;
     this.escapePoint = null;
     this.escaped = false;
+    this.glanceT = 0;
+    this.lastDistQ = 99;
     this.sawPickup = false;
     this.helper = false;
     this.enabled = true;
@@ -207,7 +216,9 @@ export class RivalBrain {
     const q = w.quarry;
     const fish = w.fish;
     const distQ = Math.hypot(q.position.x - a.position.x, q.position.z - a.position.z);
-    a.lookTarget = distQ < 12 ? q.center(_knee2) : null;
+    this.lastDistQ = distQ;
+    if (this.glanceT > 0) this.glanceT -= dt;
+    a.lookTarget = this.glanceT > 0 ? this.glancePoint : distQ < 12 ? q.center(_knee2) : null;
 
     // Hissed at: back away for the hesitation window.
     if (a.hesitateT > 0) {
@@ -518,6 +529,53 @@ export class RivalBrain {
       if (this.tryPounce(w, distQ)) this.missionDone = true;
       else if (distQ < 3) this.moveTo(q.position, dt, w, true);
     }
+  }
+
+  /**
+   * Hearing. Loudness falls off with distance; what a cat does about it
+   * depends on the sound, on what it is busy with, and on its archetype
+   * (chaos cats investigate everything, ambushers mostly just look).
+   */
+  hear(e: GameEvents["sound"]): void {
+    const a = this.actor;
+    if (!this.enabled || !a.active || e.source === this.id) return;
+    const d = Math.hypot(e.x - a.position.x, e.z - a.position.z) + Math.abs(e.y - a.position.y) * 1.5;
+    if (d > e.radius) return;
+    const loud = e.intensity * (1 - d / e.radius);
+    const p = _w.set(e.x, e.y, e.z);
+    // the fish always comes first
+    if (this.state === "ESCAPE_WITH_FISH" || this.state === "FISH_CHASE") return;
+    switch (e.type) {
+      case "pigeonBurst":
+        // the flock explodes around them: everyone flinches and hesitates
+        if (loud > 0.12 && this.state !== "POUNCE") this.distract(1.4 + loud * 1.4, p, "pigeons");
+        return;
+      case "fishDrop":
+      case "catHiss":
+        this.glance(p, 0.8);
+        return;
+      default: {
+        const busy = (this.state === "CHASE" || this.state === "INTERCEPT" || this.state === "POUNCE") && this.lastDistQ < 9;
+        if (busy || loud < CURIOSITY[this.p.archetype]) {
+          this.glance(p, 1.1);
+          return;
+        }
+        if (this.state === "DISTRACTED") {
+          // a rolling bottle keeps pulling the investigation along with it
+          if (this.distractKind === "noise") {
+            this.distractPoint.copy(p);
+            this.distractT = Math.max(this.distractT, 1.0);
+          }
+          return;
+        }
+        this.distract(1.2 + loud * 2.2, p, "noise");
+      }
+    }
+  }
+
+  private glance(p: THREE.Vector3, seconds: number): void {
+    this.glancePoint.copy(p);
+    this.glanceT = Math.max(this.glanceT, seconds);
   }
 
   /** Supplied by the game in Round 2 (current Past You replay time). */

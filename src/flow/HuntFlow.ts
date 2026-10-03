@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { CATS } from "../data/cats";
 import { SPAWN } from "../data/level";
+import { PALETTE } from "../data/palette";
 import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
 import { formatClock } from "../core/math";
@@ -11,6 +12,14 @@ import { castAssignments, heuristicPlan, type Assignment } from "../ai/TacticalF
 import { recordSteal } from "../ui/records";
 
 const HUNT_INTRO = 1.2;
+/** What Past You is doing again when it replays a recorded interaction. */
+const ECHO_DEEDS: Record<string, string> = {
+  trashCan: "KNOCKED OVER THE TRASH CAN",
+  pigeonFeed: "SPILLED THE PIGEON FEED",
+  bottle: "KICKED THE BOTTLE",
+  laundry: "DROPPED THE LAUNDRY",
+  fishScraps: "SPILLED THE FISH SCRAPS",
+};
 /** Past You flashes its "!" this long before replaying a hiss or pounce. */
 const ECHO_TELL_LEAD = 0.3;
 
@@ -147,9 +156,16 @@ export function registerHuntFlow(g: Game): void {
             g.bus.emit("hissStart", { cat: id, dirX: dir.x, dirZ: dir.z, x: p.x, y: p.y, z: p.z });
             break;
           }
-          case "interact":
-            if (ev.payload?.target) g.interactables.trigger(ev.payload.target, a, g.interactHooks(a), g.effects, g.bus);
+          case "interact": {
+            const target = ev.payload?.target;
+            if (target && g.interactables.trigger(target, a, g.interactHooks(a), g.effects, g.bus)) {
+              // "...wait, I did that."
+              g.alert(`PAST YOU ${ECHO_DEEDS[target] ?? "STRUCK AGAIN"}`, "info");
+              const it = g.interactables.get(target as Parameters<typeof g.interactables.get>[0]);
+              if (it) g.effects.ring(it.position.clone().setY(it.position.y + 0.05), 1.8, PALETTE.seaGlass, 0.6);
+            }
             break;
+          }
           case "fishPickup":
             if (g.fish.state === "table") {
               g.fish.reservedFor = null;

@@ -4,6 +4,9 @@
 
 import type { CatId } from "../data/cats";
 
+/** What AI cats can hear (see RivalBrain.hear). */
+export type SoundType = "trashCrash" | "bottleRoll" | "bell" | "pigeonBurst" | "fishDrop" | "catHiss" | "laundryFlap" | "scrapsSpill";
+
 export interface GameEvents {
   jump: { cat: CatId; x: number; y: number; z: number };
   land: { cat: CatId; x: number; y: number; z: number; impact: number };
@@ -20,7 +23,8 @@ export interface GameEvents {
   gripChanged: { cat: CatId; grip: number };
   fishLanded: { x: number; y: number; z: number };
   footstep: { cat: CatId; sprint: boolean; x: number; y: number; z: number; volume: number };
-  noise: { source: string; x: number; y: number; z: number; radius: number };
+  /** Something audible happened: AI cats within earshot may react. */
+  sound: { type: SoundType; x: number; y: number; z: number; radius: number; intensity: number; source: CatId | "world" };
   pigeonsBurst: { x: number; y: number; z: number; count: number };
   zoneEnter: { cat: CatId; zone: string; index: number };
   alert: { text: string; kind: "stolen" | "dropped" | "recovered" | "perfect" | "info" };

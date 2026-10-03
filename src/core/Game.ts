@@ -156,6 +156,7 @@ export class Game {
   private lastPlayerGrip = MAX_GRIP;
   private dustTimer = 0;
   private escapePulse = 0;
+  private cueTimer = 0;
   private scentT = 99;
   readonly tmp = new THREE.Vector3();
   private readonly trackPos = new THREE.Vector3();
@@ -406,6 +407,7 @@ export class Game {
         this.telemetry.onFishDrop();
       }
       this.alert("FISH DROPPED!", "dropped");
+      this.bus.emit("sound", { type: "fishDrop", x: e.x, y: e.y, z: e.z, radius: 16, intensity: 1, source: e.cat });
       this.time.slowMo(0.45, 0.3);
       this.camera.addTrauma(0.3);
       // nearby cats notice
@@ -429,6 +431,10 @@ export class Game {
       if (this.round === 2 && this.controlled && e.hisser === this.controlled.id) this.huntStats.perfectHisses++;
       if (this.round === 2 && e.hisser === this.runnerId) this.huntStats.echoPerfectHisses++;
       if (this.round === 1 && e.hisser === this.runnerId) this.huntStats.perfectHisses++;
+    });
+    // AI hearing: every game-driven cat within earshot decides how to react
+    this.bus.on("sound", (e) => {
+      for (const c of this.cats) if (c.mode === "ai") this.brains[c.id].hear(e);
     });
     this.bus.on("respawn", (e) => {
       if (e.cat === this.runnerId && isRunRecording()) this.recorder.cut(this.runTime, snap);
@@ -631,15 +637,33 @@ export class Game {
           this.brains[a.id].distract(seconds, p, kind);
         }
       },
-      tangle: (p, radius, seconds) => {
+      distractNearest: (p, radius, kind, seconds) => {
+        let best: CatActor | null = null;
+        let bestD = radius;
+        for (const a of this.cats) {
+          if (a.mode !== "ai" || a === source) continue;
+          const d = a.position.distanceTo(p);
+          if (d < bestD) {
+            bestD = d;
+            best = a;
+          }
+        }
+        if (best) this.brains[best.id].distract(seconds, p, kind);
+      },
+      tangle: (p, radius, seconds, skip) => {
         for (const c of this.cats) {
           if (c === source || c.mode === "replay" || !c.active) continue;
           if (source && c.team === source.team) continue;
+          if (skip?.has(c.id)) continue;
           if (Math.hypot(c.position.x - p.x, c.position.z - p.z) < radius && Math.abs(c.position.y - p.y) < 1.5) {
             c.tangledT = seconds;
             c.abilities.cancelAll();
+            skip?.add(c.id);
           }
         }
+      },
+      sound: (type, p, radius, intensity) => {
+        this.bus.emit("sound", { type, x: p.x, y: p.y, z: p.z, radius, intensity, source: source ? source.id : "world" });
       },
     };
   }
@@ -679,6 +703,18 @@ export class Game {
     if (round === 1) this.updateGripRecovery(dt);
     this.interactables.update(dt, this.time.simTime);
     this.pigeons.update(dt, this.cats);
+    // in-world cue: props you could use twinkle as you approach
+    this.cueTimer -= dt;
+    if (ctl && this.cueTimer <= 0) {
+      this.cueTimer = 0.45;
+      for (const it of this.interactables.list) {
+        if (it.used) continue;
+        const d = Math.hypot(it.position.x - ctl.position.x, it.position.z - ctl.position.z);
+        if (d > 7 || Math.abs(it.position.y - ctl.position.y) > 2) continue;
+        const lift = it.id === "laundry" ? 1.8 : 0.85;
+        this.effects.twinkle(this.tmp.set(it.position.x + (Math.random() - 0.5) * 0.6, it.position.y + lift + Math.random() * 0.4, it.position.z + (Math.random() - 0.5) * 0.6), 0xfff3b0, 0.12);
+      }
+    }
     // pounces into props knock them over
     for (const c of this.cats) {
       if (c.abilities.pounceState !== "active") continue;

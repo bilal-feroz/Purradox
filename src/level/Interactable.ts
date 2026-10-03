@@ -4,7 +4,7 @@ import { PALETTE } from "../data/palette";
 import { INTERACTABLES } from "../data/level";
 import { clamp01, easeOutCubic } from "../core/math";
 import type { CatActor } from "../cats/CatActor";
-import type { EventBus } from "../core/EventBus";
+import type { EventBus, SoundType } from "../core/EventBus";
 import type { PhysicsWorld } from "../physics/PhysicsWorld";
 import type { Effects } from "../rendering/Effects";
 import { box, cone, cyl, cylUp, ico, lowPoly, merge, place, shade } from "../rendering/LowPoly";
@@ -25,7 +25,12 @@ export interface InteractContext {
 export interface InteractHooks {
   burstPigeons: (p: THREE.Vector3, radius: number) => void;
   distract: (p: THREE.Vector3, radius: number, kind: "scraps" | "pigeons" | "noise" | "laundry", seconds: number, only?: string) => void;
-  tangle: (p: THREE.Vector3, radius: number, seconds: number) => void;
+  /** Distract only the nearest AI cat within `radius` (fish scraps). */
+  distractNearest: (p: THREE.Vector3, radius: number, kind: "scraps" | "pigeons" | "noise" | "laundry", seconds: number) => void;
+  /** Tangle cats near `p`; ids in `skip` are left alone and new victims are added. */
+  tangle: (p: THREE.Vector3, radius: number, seconds: number, skip?: Set<string>) => void;
+  /** Emit a sound that AI cats can hear. */
+  sound: (type: SoundType, p: THREE.Vector3, radius: number, intensity: number) => void;
 }
 
 abstract class Interactable implements Resettable, Rewindable {
@@ -121,7 +126,8 @@ class TrashCan extends Interactable {
 
   protected onTrigger(_ctx: InteractContext, hooks: InteractHooks, effects: Effects): void {
     effects.dust(this.position.clone().addScaledVector(this.dir, 0.6), 8, 0.8, 1.0, 0.18);
-    hooks.distract(this.position, 13, "noise", 2.2);
+    // a big metallic crash: nearby cats come to look
+    hooks.sound("trashCrash", this.position, 15, 1);
     this.collider.setEnabled(false);
   }
 
@@ -199,7 +205,7 @@ class PigeonFeed extends Interactable {
   protected onTrigger(_ctx: InteractContext, hooks: InteractHooks, effects: Effects): void {
     effects.seeds(this.position.clone().setY(this.position.y + 0.3), 30, this.position.y);
     hooks.burstPigeons(this.position, 9);
-    hooks.distract(this.position, 11, "pigeons", 2.6);
+    hooks.sound("pigeonBurst", this.position, 11, 1);
   }
 
   update(dt: number): void {
@@ -257,7 +263,8 @@ class FishScraps extends Interactable {
 
   protected onTrigger(_ctx: InteractContext, hooks: InteractHooks, effects: Effects): void {
     effects.scraps(this.position.clone().setY(this.position.y + 0.15), 10, this.position.y);
-    hooks.distract(this.position, 18, "scraps", 3.8, "mochi");
+    hooks.distractNearest(this.position, 18, "scraps", 3.8);
+    hooks.sound("scrapsSpill", this.position, 9, 0.5);
   }
 
   update(dt: number): void {
@@ -282,6 +289,11 @@ class Bottle extends Interactable {
   readonly id = "bottle" as const;
   readonly label = "KNOCK THE BOTTLE";
   private readonly bottle = new THREE.Group();
+  private hooks: InteractHooks | null = null;
+  private clinkT = 0;
+  private readonly rollPos = new THREE.Vector3();
+  /** How far it rolls (m). */
+  private static readonly ROLL = 3.6;
 
   constructor(pos: THREE.Vector3, mats: Materials) {
     super(pos);
@@ -301,14 +313,28 @@ class Bottle extends Interactable {
   }
 
   protected onTrigger(_ctx: InteractContext, hooks: InteractHooks): void {
-    hooks.distract(this.position, 7, "noise", 1.4);
+    this.hooks = hooks;
+    this.clinkT = 0;
+    hooks.sound("bottleRoll", this.position, 10, 0.8);
   }
 
   update(dt: number): void {
     if (this.used && this.progress < 1) {
-      this.progress = Math.min(1, this.progress + dt / 1.6);
+      this.progress = Math.min(1, this.progress + dt / 2.2);
       this.pose();
+      // a moving sound source: cats track the rattling bottle as it rolls
+      this.clinkT -= dt;
+      if (this.hooks && this.clinkT <= 0 && this.progress < 0.95) {
+        this.clinkT = 0.3;
+        this.rollPos.copy(this.bottle.position).add(this.group.position);
+        this.hooks.sound("bottleRoll", this.rollPos, 9, 0.65);
+      }
     }
+  }
+
+  override reset(): void {
+    this.hooks = null;
+    super.reset();
   }
 
   protected pose(): void {
@@ -319,8 +345,8 @@ class Bottle extends Interactable {
     this.bottle.rotation.set(0, 0, 0);
     this.bottle.rotation.y = yaw + Math.PI / 2;
     this.bottle.rotateZ(-fall * (Math.PI / 2));
-    this.bottle.rotateY(roll * 14);
-    this.bottle.position.set(this.dir.x * roll * 1.9, fall * 0.12, this.dir.z * roll * 1.9);
+    this.bottle.rotateY(roll * 24);
+    this.bottle.position.set(this.dir.x * roll * Bottle.ROLL, fall * 0.12, this.dir.z * roll * Bottle.ROLL);
   }
 }
 
@@ -331,6 +357,13 @@ class Laundry extends Interactable {
   private readonly sheet: THREE.Mesh;
   private readonly base: Float32Array;
   private time = 0;
+  private hooks: InteractHooks | null = null;
+  private readonly tangled = new Set<string>();
+  private tangleT = 0;
+  /** Seconds the dropped sheet lies across the roof before the wind takes it. */
+  private static readonly LIE = 7;
+  private restX = 0;
+  private restY = 0;
 
   constructor(a: THREE.Vector3, b: THREE.Vector3, mats: Materials) {
     super(a.clone().lerp(b, 0.5));
@@ -359,6 +392,8 @@ class Laundry extends Interactable {
     this.sheet = new THREE.Mesh(flat, mats.cloth);
     this.sheet.castShadow = true;
     this.sheet.position.set((a.x + b.x) / 2, a.y + h - 0.02, (a.z + b.z) / 2);
+    this.restX = this.sheet.position.x;
+    this.restY = this.sheet.position.y;
     this.sheet.rotation.y = Math.atan2(b.x - a.x, b.z - a.z) - Math.PI / 2;
     this.group.add(this.sheet);
     // pegs
@@ -368,19 +403,48 @@ class Laundry extends Interactable {
     this.sheet.add(pg);
   }
 
-  protected onTrigger(_ctx: InteractContext, hooks: InteractHooks): void {
-    hooks.tangle(this.position, 2.4, 2.2);
-    hooks.distract(this.position, 6, "laundry", 1.2);
+  protected onTrigger(ctx: InteractContext, hooks: InteractHooks): void {
+    this.hooks = hooks;
+    this.tangled.clear();
+    this.tangled.add(ctx.cat.id);
+    this.tangleT = 0;
+    hooks.tangle(this.position, 2.4, 2.2, this.tangled);
+    hooks.sound("laundryFlap", this.position, 8, 0.6);
   }
 
   update(dt: number, time: number): void {
     this.time = time;
-    if (this.used && this.progress < 1) this.progress = Math.min(1, this.progress + dt / 0.55);
+    if (this.used) {
+      // progress: 0→1 drop, 1→1+LIE/LIE… lying across the route, then 2→3 blown away
+      const lying = this.progress >= 1 && this.progress < 2;
+      const rate = this.progress < 1 ? 1 / 0.55 : lying ? 1 / Laundry.LIE : 1 / 1.4;
+      this.progress = Math.min(3, this.progress + dt * rate);
+      if (lying && this.hooks) {
+        // anyone who runs into the fallen sheet gets wrapped up (once)
+        this.tangleT -= dt;
+        if (this.tangleT <= 0) {
+          this.tangleT = 0.15;
+          this.hooks.tangle(this.position, 2.1, 1.6, this.tangled);
+        }
+      }
+    }
     this.pose();
+  }
+
+  override reset(): void {
+    this.hooks = null;
+    this.tangled.clear();
+    super.reset();
   }
 
   protected pose(): void {
     const t = clamp01(this.progress);
+    // blown away by the wind after lying on the roof for a while
+    const away = clamp01(this.progress - 2);
+    this.sheet.visible = away < 0.999;
+    this.sheet.position.y = this.restY + easeOutCubic(away) * 3.2;
+    this.sheet.position.x = this.restX + away * away * 4.5;
+    this.sheet.rotation.z = away * 0.9;
     const pos = this.sheet.geometry.getAttribute("position") as THREE.BufferAttribute;
     const arr = pos.array as Float32Array;
     const fall = easeOutCubic(t);
