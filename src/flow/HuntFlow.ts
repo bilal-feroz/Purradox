@@ -9,6 +9,7 @@ import { zoneAt } from "../level/Zones";
 import type { ReplayData } from "../replay/ReplayTypes";
 import type { TacticalPlan } from "../ai/TacticalFallback";
 import { heuristicPlan } from "../ai/TacticalFallback";
+import { recordSteal } from "../ui/records";
 
 const HUNT_INTRO = 1.2;
 /** Past You flashes its "!" this long before replaying a hiss or pounce. */
@@ -246,6 +247,7 @@ export function registerHuntFlow(g: Game): void {
       g.history.tick(g.huntTime, true);
       const hunter = g.controlled!;
       if (g.huntSuccess) {
+        if (g.huntStats.stolenAt !== null) recordSteal(g.huntStats.stolenAt);
         g.echo.stop();
         g.time.slowMo(1.2, 0.35);
         hunter.setForcedAction("victory");

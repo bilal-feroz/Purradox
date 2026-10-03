@@ -4,8 +4,14 @@ import { SPAWN } from "../data/level";
 import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
 import { zoneAt } from "../level/Zones";
+import { recordEscape } from "../ui/records";
 
 const MENU_CAT = new THREE.Vector3(-18.6, 0, 13.4);
+/** Menu camera relative to the hero cat (cat sits right of frame). */
+const MENU_CAM = new THREE.Vector3(-1.0, 1.02, 3.3);
+const MENU_LOOK = new THREE.Vector3(-1.75, 0.6, 0);
+/** Where the foreground pigeon stands on screen (NDC). */
+const MENU_PIGEON_NDC = new THREE.Vector2(0.71, -0.8);
 /** Extra windup (s) on each rival's first pounce of Round 1. */
 const FIRST_POUNCE_BONUS = 0.3;
 const WATCH_SPOTS: Array<[number, number, number]> = [
@@ -44,15 +50,20 @@ export function registerRunFlow(g: Game): void {
       g.fishCat.mode = "scripted";
       g.fishCat.teleport(MENU_CAT, -0.35);
       g.fish.forceCarry(g.fishCat, 3);
-      g.camera.setCinematic(new THREE.Vector3(MENU_CAT.x - 1.2, 1.15, MENU_CAT.z + 3.9), new THREE.Vector3(MENU_CAT.x - 2.0, 0.62, MENU_CAT.z), 3, true);
+      const camPos = MENU_CAT.clone().add(MENU_CAM);
+      const camLook = MENU_CAT.clone().add(MENU_LOOK);
+      g.camera.setCinematic(camPos, camLook, 3, true);
+      stageMenuPigeon(g, camPos, camLook);
       sway = 0;
     },
     update: (dt) => {
       sway += dt;
       const c = MENU_CAT;
+      // Portrait screens: centre the cat below the menu instead of right of it.
+      const portrait = g.camera.camera.aspect < 1;
       g.camera.setCinematic(
-        new THREE.Vector3(c.x - 1.2 + Math.sin(sway * 0.25) * 0.4, 1.15 + Math.sin(sway * 0.4) * 0.08, c.z + 3.9),
-        new THREE.Vector3(c.x - 2.0, 0.62, c.z),
+        new THREE.Vector3(c.x + MENU_CAM.x + Math.sin(sway * 0.25) * 0.16, MENU_CAM.y + Math.sin(sway * 0.4) * 0.05, c.z + MENU_CAM.z),
+        portrait ? new THREE.Vector3(c.x, c.y + 1.2, c.z) : c.clone().add(MENU_LOOK),
         2,
       );
       if (!g.photoCamera) g.fishCat.lookTarget = g.camera.camera.position;
@@ -64,6 +75,7 @@ export function registerRunFlow(g: Game): void {
     },
     exit: () => {
       g.start.show(false);
+      g.pigeons.unstage();
       g.fishCat.lookTarget = null;
     },
   });
@@ -157,6 +169,7 @@ export function registerRunFlow(g: Game): void {
     enter: () => {
       g.replay = g.recorder.finish(g.runTime, () => g.snapshotFishCat(), true);
       g.history.tick(g.runTime, true);
+      recordEscape(g.runTime);
       // Ask the Tactical Director now, while the end-of-run beats play.
       g.plan = null;
       g.planRequest = g.director.analyze(g.telemetry.summary());
@@ -232,4 +245,31 @@ export function registerRunFlow(g: Game): void {
   });
 
   void SPAWN;
+}
+
+/** Put the market pigeon nearest the hero cat in the menu's foreground. */
+function stageMenuPigeon(g: Game, camPos: THREE.Vector3, camLook: THREE.Vector3): void {
+  // Nominal 16:9 camera: placement must not depend on the window size at boot.
+  const cam = new THREE.PerspectiveCamera(g.camera.camera.fov, 16 / 9, 0.1, 100);
+  cam.position.copy(camPos);
+  cam.lookAt(camLook);
+  cam.updateMatrixWorld();
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(MENU_PIGEON_NDC, cam);
+  const spot = ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -MENU_CAT.y), new THREE.Vector3());
+  if (!spot) return;
+  let best = 0;
+  let bestD = Infinity;
+  g.pigeons.pigeons.forEach((p, i) => {
+    const d = p.home.distanceTo(MENU_CAT);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  });
+  // face screen-left, slightly toward the camera
+  const toCam = camPos.clone().sub(spot).setY(0).normalize();
+  const left = new THREE.Vector3(-toCam.z, 0, toCam.x);
+  const face = left.multiplyScalar(0.8).add(toCam.multiplyScalar(0.45));
+  g.pigeons.stage(best, spot, Math.atan2(face.x, face.z), 0.82);
 }

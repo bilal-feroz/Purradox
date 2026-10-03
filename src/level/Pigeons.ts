@@ -29,6 +29,8 @@ interface Pigeon {
   peck: number;
   flap: number;
   seed: number;
+  /** How far the bird strolls from home (m). */
+  wander: number;
 }
 
 /** Mirror a non-indexed geometry across X, fixing triangle winding. */
@@ -167,10 +169,42 @@ export class PigeonFlock implements Resettable {
         peck: 0,
         flap: 0,
         seed: this.rng.range(0, 100),
+        wander: 1.2,
       });
     }
     this.reset();
   }
+
+  /** Menu staging: pin one bird near a spot (it only shuffles and pecks). */
+  stage(index: number, at: THREE.Vector3, yaw: number, scale = 1): void {
+    this.unstage();
+    const p = this.pigeons[index];
+    if (!p) return;
+    this.staged = { p, home: p.home.clone() };
+    p.home.copy(at);
+    p.pos.copy(at);
+    p.walkTarget.copy(at);
+    p.vel.set(0, 0, 0);
+    p.state = "ground";
+    p.yaw = yaw;
+    p.wander = 0.04;
+    p.root.scale.setScalar(scale);
+    this.pose(p, 0);
+    this.syncInstances();
+  }
+
+  unstage(): void {
+    if (!this.staged) return;
+    const { p, home } = this.staged;
+    p.home.copy(home);
+    p.pos.copy(home);
+    p.walkTarget.copy(home);
+    p.wander = 1.2;
+    p.root.scale.setScalar(1);
+    this.staged = null;
+  }
+
+  private staged: { p: Pigeon; home: THREE.Vector3 } | null = null;
 
   reset(): void {
     const rng = new Random(321);
@@ -261,7 +295,7 @@ export class PigeonFlock implements Resettable {
           p.walkT -= dt;
           if (p.walkT <= 0) {
             p.walkT = this.rng.range(1.5, 4);
-            p.walkTarget.set(p.home.x + this.rng.range(-1.2, 1.2), p.home.y, p.home.z + this.rng.range(-1.2, 1.2));
+            p.walkTarget.set(p.home.x + this.rng.range(-p.wander, p.wander), p.home.y, p.home.z + this.rng.range(-p.wander, p.wander));
           }
           const dx = p.walkTarget.x - p.pos.x;
           const dz = p.walkTarget.z - p.pos.z;
