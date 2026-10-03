@@ -61,6 +61,7 @@ export class AudioManager {
   private ambience: { stop: () => void } | null = null;
   private readonly listener = new THREE.Vector3();
   private gullTimer = 6;
+  private distantTimer = 11;
   volume = 0.8;
   musicVolume = 0.55;
   private lastPlayed = new Map<string, number>();
@@ -147,6 +148,13 @@ export class AudioManager {
       if (this.gullTimer <= 0) {
         this.gullTimer = 7 + Math.random() * 9;
         this.play("seagull", { volume: 0.18 + Math.random() * 0.1 });
+      }
+      // the rest of the town, far off: a church bell, a scooter going by
+      this.distantTimer -= dt;
+      if (this.distantTimer <= 0) {
+        this.distantTimer = 16 + Math.random() * 18;
+        if (Math.random() < 0.45) this.distantBell();
+        else this.distantScooter();
       }
     }
   }
@@ -328,6 +336,53 @@ export class AudioManager {
   }
 
   // ---------------------------------------------------------------- synth primitives
+  /** Two soft, far-off chimes from somewhere up the hill. */
+  private distantBell(): void {
+    const ctx = this.ctx!;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1400;
+    lp.connect(this.amb);
+    const now = ctx.currentTime + 0.05;
+    for (const [i, f] of [392, 294].entries()) {
+      this.tone(lp, now + i * 0.9, "sine", f, 2.6, 0.035);
+      this.tone(lp, now + i * 0.9, "sine", f * 2.76, 1.4, 0.012);
+    }
+    setTimeout(() => lp.disconnect(), 5000);
+  }
+
+  /** A scooter buzzing along a street you can't see. */
+  private distantScooter(): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + 0.05;
+    const dur = 3.2;
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(88, t);
+    o.frequency.linearRampToValueAtTime(118, t + dur * 0.45);
+    o.frequency.linearRampToValueAtTime(82, t + dur);
+    const wob = ctx.createOscillator();
+    wob.frequency.value = 23;
+    const wobGain = ctx.createGain();
+    wobGain.gain.value = 6;
+    wob.connect(wobGain);
+    wobGain.connect(o.frequency);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 650;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.03, t + dur * 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp);
+    lp.connect(g);
+    g.connect(this.amb);
+    o.start(t);
+    wob.start(t);
+    o.stop(t + dur + 0.05);
+    wob.stop(t + dur + 0.05);
+  }
+
   private tone(out: AudioNode, t: number, type: OscillatorType, f: number, dur: number, vol: number): void {
     const ctx = this.ctx!;
     const o = ctx.createOscillator();
