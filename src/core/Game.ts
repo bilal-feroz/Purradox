@@ -45,6 +45,7 @@ import { Results } from "../ui/Results";
 import { StartScreen, type Settings } from "../ui/StartScreen";
 import { loadProgress, markCycleComplete } from "../ui/records";
 import { Stamps } from "../ui/Stamps";
+import { renderShareCard } from "../ui/ShareCard";
 import { EventBus } from "./EventBus";
 import { GameState, StateMachine } from "./GameState";
 import { Input } from "./Input";
@@ -575,6 +576,16 @@ export class Game {
     this.results.onRunItBack = () => {
       this.audio.play("ui");
       if (this.fsm.state === GameState.RESULTS) this.fsm.transition(GameState.REWIND);
+    };
+    this.results.onShare = (info) => {
+      // the street as it looks right now (copied before the GL buffer clears)
+      this.renderer.render(this.scene, this.camera.camera, this.time.realTime);
+      const src = this.renderer.gl.domElement;
+      const shot = document.createElement("canvas");
+      shot.width = src.width;
+      shot.height = src.height;
+      shot.getContext("2d")?.drawImage(src, 0, 0);
+      return renderShareCard(info, shot);
     };
     this.results.onNewRun = () => {
       this.audio.play("ui");

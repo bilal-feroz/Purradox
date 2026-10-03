@@ -9,6 +9,7 @@ import type { Mission } from "../cats/CatAI";
 import { Coordinator, type CoordMission } from "../ai/Coordinator";
 import { agentFor, planForAllies } from "../ai/TacticalPlanner";
 import { recordSteal } from "../ui/records";
+import { MAX_GRIP } from "../fish/FishGrip";
 
 const HUNT_INTRO = 1.2;
 /** What Past You is doing again when it replays a recorded interaction. */
@@ -280,21 +281,50 @@ export function registerHuntFlow(g: Game): void {
       g.hud.show(false);
       g.audio.setMusic("menu");
       g.audio.setTemporalHum(false);
+      // a handful of real numbers from both rounds (no analytics clutter)
       const runT = g.replay?.duration ?? 0;
+      const s = g.runSummary;
+      const route = !s
+        ? "—"
+        : s.routeChoice.awningShortcut && s.routeChoice.rooftopShortcut
+          ? "BOTH SHORTCUTS"
+          : s.routeChoice.awningShortcut
+            ? "AWNING SHORTCUT"
+            : s.routeChoice.rooftopShortcut
+              ? "LOW-ROOF SHORTCUT"
+              : "STREET ROUTE";
+      const plan = g.plan?.strategyName ?? "—";
+      const thief = CATS[g.runnerId].name.toUpperCase();
+      const hunter = g.hunterId ? CATS[g.hunterId].name.toUpperCase() : "—";
+      const stolenAt = g.huntStats.stolenAt ?? 0;
       const rows: Array<[string, string]> = g.huntSuccess
         ? [
             ["FISH RUN", formatClock(runT)],
-            ["FISH STOLEN AT", formatClock(g.huntStats.stolenAt ?? 0)],
-            ["PERFECT HISSES", String(g.huntStats.perfectHisses)],
-            ["HUNTER", g.hunterId ? CATS[g.hunterId].title : "—"],
+            ["ROUTE", route],
+            ["COUNCIL PLAN", plan],
+            ["FISH STOLEN AT", formatClock(stolenAt)],
+            ["PERFECT HISSES", String((s?.perfectHisses ?? 0) + g.huntStats.perfectHisses)],
+            ["PROPS USED", String(s?.interactions.length ?? 0)],
           ]
         : [
             ["FISH RUN", formatClock(runT)],
-            ["HUNT ENDED", formatClock(g.echo.time)],
+            ["ROUTE", route],
+            ["COUNCIL PLAN", plan],
+            ["PAST YOU'S GRIP LEFT", `${g.fish.grip.value} / ${MAX_GRIP}`],
             ["INTERCEPT ATTEMPTS", String(g.huntStats.interceptAttempts)],
             ["PAST YOU'S PERFECT HISSES", String(g.huntStats.echoPerfectHisses)],
           ];
-      g.results.show({ success: g.huntSuccess, rows });
+      g.results.show({
+        success: g.huntSuccess,
+        rows,
+        subtitle: `AS ${hunter} · VS PAST ${thief}`,
+        share: {
+          success: g.huntSuccess,
+          headline: g.huntSuccess ? `I STOLE A FISH FROM MYSELF IN ${stolenAt.toFixed(1)} SECONDS.` : `PAST ME OUTRAN ME IN ${runT.toFixed(1)} SECONDS.`,
+          facts: [`FISH RUN ${formatClock(runT)} · ${route}`, `THE ALLEY COUNCIL PLAYED ${plan}`, `HUNTED AS ${hunter} · PAST ${thief} RAN`],
+          cat: g.hunterId,
+        },
+      });
     },
     update: (dt) => {
       g.camera.update(dt, null, null);
