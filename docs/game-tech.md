@@ -171,6 +171,7 @@ score = 1.3 × intercept quality      how close to the line, grounded, landing /
       + zone diversity
       + fingerprint prior            how strongly the run invites this strategy
       + habit focus (0.2)            the strategy that answers the most distinctive habit
+      + alley memory (0.12)          optional: answers a habit repeated three runs in a row
       − unfairness                   intercepts before 4 s; two cats stacked on one spot
       − travel impossibility         a cat that can't get there in time
       − duplicate roles
@@ -238,6 +239,21 @@ decides frame-level actions.
   error, refusal or invalid answer keeps the deterministic wording.
   **Gameplay never waits on the network.**
 
+### Alley Memory (optional)
+
+**File:** `src/ai/AlleyMemory.ts`
+
+The last five runs (route, props, hisses, speed, the plan they drew) are
+kept in the browser's local storage; there is no backend and nothing leaves
+the machine. When the same habit shows up three runs in a row (props every
+run, heavy hissing, the same route, full throttle), the strategy that
+answers it gets a +0.12 bonus and the council map adds a line such as
+"3 RUNS IN A ROW YOU TOOK THE STREET AT BOTH SPLITS." In testing, three
+identical street runs drew THE ROOFTOP TRAP, THE ROOFTOP TRAP, then THE
+CHOKE once the alley remembered. It never changes rules, cats or
+difficulty, it can't affect a first or second run, and it can be switched
+off in Settings.
+
 ## 8. Hyper3D (Rodin)
 
 Every model in the shipped build (cats, fish, pigeons, props, buildings) is
@@ -258,7 +274,7 @@ see this.
 - **While you play Round 1:** live recording stats and zone timings.
 - **After the run (and whenever the game is paused):** the Behavior
   Fingerprint and tags, recorded zone timings, every strategy the simulator
-  scored with its score breakdown (the habit-focused one is starred), the
+  scored with its score breakdown (★ habit focus, ◆ Alley Memory), the
   selected strategy and why, and each cat's assignment with its predicted
   intercept point.
 - **In the world:** a ring, beam and label at every predicted intercept, and
@@ -270,13 +286,14 @@ see this.
 
 ## Verification
 
-- `npm run verify`: TypeScript, **57 unit tests** and a production build.
+- `npm run verify`: TypeScript, **64 unit tests** and a production build.
   Tests cover the replay engine, game-state machine and Choose Your Thief
   transitions, Fish Grip rules, rewind history, level and nav-graph data,
   telemetry, the Behavior Profiler, the Counterfactual Simulator (trace
   analysis, hundreds of ranked candidates, feasible non-overlapping plans,
-  any pair of allies, fingerprint steering, habit focus), the Tactical
-  Planner, and the LLM layer's validation, timeout and failure fallbacks.
+  any pair of allies, fingerprint steering, habit focus), Alley Memory
+  (streaks, tie-breaks, storage failures, the bonus), the Tactical Planner,
+  and the LLM layer's validation, timeout and failure fallbacks.
 - The debug harness (`?debug=1`, `window.__test`) plays complete
   two-round loops through the real input path, which is how the table above
   was produced.

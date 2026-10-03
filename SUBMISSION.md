@@ -45,7 +45,7 @@ Core rules: pounce beats bad positioning, hiss beats a predictable pounce, waiti
 - **Tactical Planner:** turns the winner into roles, ambush zones and prop traps, and explains it with evidence (*"You used 2 of 2 shortcuts. Both route splits are covered: Mochi at the Pigeon Courtyard, Soot at the Low Roofs."*).
 - **Multi-Agent Coordinator:** the two AI allies get missions and re-plan only at discrete moments. They still have to walk there, see Past You and wind up their pounces; nothing snaps to a future position. Helpers can wear the grip down but never take the final point: the steal belongs to the player.
 
-Different players get different plans. In our recorded test runs a street run drew **THE ROOFTOP TRAP**, the same route with three distractions drew **THE BAIT**, and a both-shortcuts run drew **THE DOUBLE CUT**. Add `?aiDebug=1` to the URL to watch every candidate, score, assignment and predicted intercept live. Full write-up: [`docs/game-tech.md`](docs/game-tech.md).
+Different players get different plans. In our recorded test runs a street run drew **THE ROOFTOP TRAP**, the same route with three distractions drew **THE BAIT**, and a both-shortcuts run drew **THE DOUBLE CUT**. With the optional **Alley Memory** the council also remembers your last five runs (in your browser only): after three street runs in a row it says so and switches to **THE CHOKE**. Add `?aiDebug=1` to the URL to watch every candidate, score, assignment and predicted intercept live. Full write-up: [`docs/game-tech.md`](docs/game-tech.md).
 
 ## Tech stack
 
@@ -68,7 +68,7 @@ TypeScript · Vite · Three.js (WebGL2) · Rapier 3D (WASM kinematic character c
 
 ## Demo flow (≈3 minutes)
 
-1. **STEAL THE FISH.** Grab the sparkling fish from the market table.
+1. **STEAL THE FISH.** A short camera flight over Sardine Street lands on the hero fish (click to skip). Grab it from the market table.
 2. Mochi gives chase. **Pounce** to knock it over, then hiss the moment the yellow **!** pops over its head for a **PERFECT HISS!**
 3. Spill the **pigeon feed** in the courtyard: the flock bursts and the rivals get distracted.
 4. Take the **awning shortcut** (crates → coral awning → teal awning → terrace).
@@ -78,13 +78,14 @@ TypeScript · Vite · Three.js (WebGL2) · Rapier 3D (WASM kinematic character c
 8. Past You starts the exact run. Press **R** for Scent Memory and cut it off at the route split you remember.
 9. Pounce just as Past You replays your hiss → **Past You Perfect-Hisses you.** *That hiss was recorded.*
 10. Intercept again, knock the grip to zero, grab the fish → **TIMELINE BROKEN**.
+11. **MAKE A SHARE CARD**: "I STOLE A FISH FROM MYSELF IN … SECONDS."
 
 ## Repository / build details
 
 ```bash
 npm install
 npm run dev       # play locally at http://localhost:5173
-npm run verify    # type check + 57 unit tests + production build
+npm run verify    # type check + 64 unit tests + production build
 npm run build     # static build in dist/ (deployable anywhere)
 ```
 
