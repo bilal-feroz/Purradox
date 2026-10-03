@@ -26,6 +26,9 @@ export interface CombatRules {
  * A pounce that lands inside the target's hiss window and cone is a
  * PERFECT HISS: the attacker is rejected and staggered.
  */
+/** Extra reach at which a hiss repels an incoming pounce (metres). */
+const HISS_REPEL = 0.9;
+
 export class CombatSystem {
   cats: CatActor[] = [];
   rules: CombatRules = { gripFloor: () => 0, isLocal: () => false };
@@ -59,7 +62,14 @@ export class CombatSystem {
         const dy = Math.abs(_a.y - _b.y);
         if (dy > 0.95) continue;
         const dist = Math.hypot(_a.x - _b.x, _a.z - _b.z);
-        if (dist > a.stats.hitRadius + 0.3) continue;
+        let reach = a.stats.hitRadius + 0.3;
+        // A hiss meets an incoming lunge early, so a well-timed hiss
+        // reliably bounces the pouncer instead of letting it whiff.
+        if (b.abilities.hissActive && b.abilities.hissT <= HISS_WINDOW && this.inHissCone(b, a, 0.35)) {
+          const toward = (_b.x - _a.x) * a.abilities.pounceDir.x + (_b.z - _a.z) * a.abilities.pounceDir.z > 0;
+          if (toward) reach += HISS_REPEL;
+        }
+        if (dist > reach) continue;
         this.resolve(a, b);
         break;
       }

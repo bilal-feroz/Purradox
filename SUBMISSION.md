@@ -24,7 +24,7 @@ Game AI usually only pretends to know you: a rival sees the same scripted level 
 
 ## Gameplay
 
-1. **Round 1 — Steal the fish.** As **Fish Cat**, grab the hero fish in the Fish Market and escape through eight connected zones of Sardine Street (Market Exit, the First Alley route split, the Pigeon Courtyard, the Second Alley climb, the Laundry Rooftops and the Final Climb) to the **Safe Rooftop**. Mochi pressures you early, Soot ambushes the chokepoints and Beans causes rooftop chaos. Rival pounces cost **Fish Grip** (3 → 0); at zero the fish flies loose and they can steal it.
+1. **Round 1 — Steal the fish.** As **Fish Cat**, grab the hero fish in the Fish Market and escape through eight connected zones of Sardine Street (Market Exit, the First Alley route split, the Pigeon Courtyard, the Second Alley climb, the Laundry Rooftops and the Final Climb) to the **Safe Rooftop**. Mochi pressures you early, Soot ambushes the chokepoints and Beans causes rooftop chaos. Rival pounces cost **Fish Grip** (3 → 0); at zero the fish flies loose and they can steal it. Every rival lunge is telegraphed by a yellow **!**: hiss on it to bounce them off, and go 8 seconds clean to tighten your grip again.
 2. **RUN COMPLETE → RUN RECORDED → "But someone else was watching."** The rivals were on the roof the whole time.
 3. **The Alley Council** reads your run and names a counter-strategy, such as **THE ROOFTOP TRAP**.
 4. **Rewind.** The whole street runs backwards in a diorama shot while your recorded route glows and shrinks back to the market.

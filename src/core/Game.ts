@@ -10,6 +10,7 @@ import { CatActor } from "../cats/CatActor";
 import { RivalBrain, type AIWorld } from "../cats/CatAI";
 import { CombatSystem } from "../combat/CombatSystem";
 import { FishSystem } from "../fish/Fish";
+import { MAX_GRIP } from "../fish/FishGrip";
 import { Interactables, type InteractHooks } from "../level/Interactable";
 import { PigeonFlock } from "../level/Pigeons";
 import { ResetManager } from "../level/ResetManager";
@@ -70,6 +71,9 @@ function loadSettings(): Settings {
  * Top-level orchestrator: owns every system, runs the frame loop and the
  * explicit game-state machine. Round logic lives in src/flow/*.
  */
+/** Round 1: seconds without a hit before Fish Cat regains one grip. */
+const GRIP_RECOVER_SECONDS = 8;
+
 export class Game {
   readonly bus = new EventBus();
   readonly time = new GameTime();
@@ -139,6 +143,9 @@ export class Game {
   manualStepping = false;
   settings: Settings;
   private lastZoneIndex = 0;
+  /** Round 1: seconds Fish Cat has carried the fish without losing grip. */
+  private gripCalmT = 0;
+  private lastPlayerGrip = MAX_GRIP;
   private dustTimer = 0;
   private scentT = 99;
   readonly tmp = new THREE.Vector3();
@@ -332,7 +339,7 @@ export class Game {
       this.effects.exclaim(cat.position);
       this.effects.ring(new THREE.Vector3(e.x, e.y + 0.04, e.z), 0.9, 0xf7cf55, 0.3);
       const me = this.controlled;
-      if (me && me.team !== cat.team && me.abilities.hissReady && me.position.distanceTo(cat.position) < 6) this.hud.cue("hiss");
+      if (me && me.team !== cat.team && me.abilities.hissReady && me.position.distanceTo(cat.position) < 8) this.hud.cue("hiss");
     });
     this.bus.on("hissStart", (e) => {
       if (e.cat === "fishcat" && isRunRecording()) {
@@ -374,7 +381,11 @@ export class Game {
       }
     });
     this.bus.on("gripChanged", (e) => {
-      if (e.cat === "fishcat" && isRunRecording() && e.grip < 3) {
+      if (e.cat !== "fishcat") return;
+      const lost = e.grip < this.lastPlayerGrip;
+      this.lastPlayerGrip = e.grip;
+      if (lost) this.gripCalmT = 0;
+      if (lost && isRunRecording()) {
         this.telemetry.onGripLoss({ t: this.runTime, x: this.fishCat.position.x, y: this.fishCat.position.y, z: this.fishCat.position.z, zone: zoneAt(this.fishCat.position.x, this.fishCat.position.y, this.fishCat.position.z)?.id ?? "" });
       }
     });
@@ -506,6 +517,8 @@ export class Game {
     this.fish.pickupGrip = (c) => (c.id === "fishcat" ? 3 : 1);
     this.input.clearBuffers();
     this.lastZoneIndex = 0;
+    this.gripCalmT = 0;
+    this.lastPlayerGrip = MAX_GRIP;
     this.scentT = 99;
     this.physics.step(1 / 60);
   }
@@ -611,6 +624,7 @@ export class Game {
     this.physics.step(dt);
     this.combat.update();
     this.fish.update(dt, this.cats, this.time.simTime);
+    if (round === 1) this.updateGripRecovery(dt);
     this.interactables.update(dt, this.time.simTime);
     this.pigeons.update(dt, this.cats);
     // pounces into props knock them over
@@ -703,6 +717,22 @@ export class Game {
         this.hud.setObjective("", "", false);
       }
     }
+  }
+
+  /** Round 1 forgiveness: Fish Cat tightens its grip after a clean stretch. */
+  private updateGripRecovery(dt: number): void {
+    const f = this.fish;
+    if (f.owner !== this.fishCat || f.grip.value >= MAX_GRIP) {
+      this.gripCalmT = 0;
+      return;
+    }
+    this.gripCalmT += dt;
+    if (this.gripCalmT < GRIP_RECOVER_SECONDS) return;
+    this.gripCalmT = 0;
+    f.grip.reset(f.grip.value + 1);
+    this.bus.emit("gripChanged", { cat: "fishcat", grip: f.grip.value });
+    this.effects.sparkle(this.tmp.copy(this.fishCat.position).setY(this.fishCat.position.y + 0.6), 8, 0xfff3b0, 1.4, 0.45);
+    this.audio.play("pickup", { volume: 0.25, pitch: 1.2 });
   }
 
   /** Project the fish (or its holder) into the HUD tracker. */

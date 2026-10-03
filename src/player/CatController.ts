@@ -64,7 +64,7 @@ export class CatController {
   /** Point `aim` at the nearest opponent winding up a pounce, from any side. */
   private faceThreat(a: CatActor, aim: THREE.Vector3): boolean {
     let best: CatActor | null = null;
-    let bestD = 5.5;
+    let bestD = 8;
     for (const t of this.targets) {
       if (t === a || !t.active || t.team === a.team) continue;
       const ps = t.abilities.pounceState;

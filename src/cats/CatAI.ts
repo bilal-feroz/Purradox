@@ -329,14 +329,19 @@ export class RivalBrain {
     const a = this.actor;
     const q = w.quarry;
     if (this.pounceTimer > 0 || !a.abilities.pounceReady || !a.canAct || !a.grounded) return false;
-    if (distQ > this.p.pounceRange || Math.abs(q.position.y - a.position.y) > 0.7) return false;
+    if (distQ > this.p.pounceRange + 2.5 || Math.abs(q.position.y - a.position.y) > 0.7) return false;
     if (q.staggerT > 0.1) return false;
+    // Judge range by where the quarry will be when the windup ends: ambushers
+    // lunge early at an approaching cat, chasers don't whiff at a fleeing one.
+    w.predict(AI_POUNCE_WINDUP, _p);
+    const reach = Math.hypot(_p.x - a.position.x, _p.z - a.position.z);
+    if (reach > this.p.pounceRange) return false;
     _knee.copy(a.position).setY(a.position.y + 0.45);
     _w.copy(q.position).setY(q.position.y + 0.45);
     if (!w.physics.lineOfSight(_knee, _w)) return false;
     this.pounceTimer = this.p.pounceCooldown * (w.round === 2 ? 0.8 : 1) + this.rng.range(-0.3, 0.4);
     if (!this.rng.chance(this.p.pounceChance)) return false;
-    const travel = distQ / Math.max(1, a.stats.pounceSpeed);
+    const travel = reach / Math.max(1, a.stats.pounceSpeed);
     w.predict(travel + AI_POUNCE_WINDUP, _p);
     a.pounceAim.subVectors(_p, a.position).setY(0);
     if (a.pounceAim.lengthSq() < 1e-4) a.pounceAim.copy(a.forward());

@@ -5,7 +5,7 @@ export type PounceState = "idle" | "windup" | "active" | "recover";
 
 export const POUNCE_WINDUP = 0.075;
 /** Rivals telegraph their pounce for this long (readable Perfect Hiss tell). */
-export const AI_POUNCE_WINDUP = 0.27;
+export const AI_POUNCE_WINDUP = 0.3;
 export const POUNCE_RECOVER = 0.2;
 export const HISS_WINDOW = 0.5;
 /** Portion of the hiss window that counts as a Perfect Hiss. */
