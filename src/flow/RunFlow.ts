@@ -53,7 +53,7 @@ export function registerRunFlow(g: Game): void {
         new THREE.Vector3(c.x - 2.0, 0.62, c.z),
         2,
       );
-      g.fishCat.lookTarget = g.camera.camera.position;
+      if (!g.photoCamera) g.fishCat.lookTarget = g.camera.camera.position;
       g.fishCat.updateScripted(dt);
       for (const id of RIVAL_IDS) g.rivals[id].updateScripted(dt);
       g.fish.update(dt, [], g.time.realTime);
@@ -122,9 +122,9 @@ export function registerRunFlow(g: Game): void {
       g.telemetry.reset();
       g.runTime = 0;
       g.time.baseScale = 1;
-      g.camera.snapBehind(g.fishCat.yaw, g.fishCat.position.clone().setY(g.fishCat.position.y + 0.85));
-      g.camera.pitch = 0.2;
-      g.camera.distance = 4.6;
+      g.camera.snapBehind(g.fishCat.yaw, g.fishCat.position.clone().setY(g.fishCat.position.y + 0.78));
+      g.camera.pitch = 0.12;
+      g.camera.distance = 3.7;
       g.input.requestPointerLock();
       g.recorder.tick(0, () => g.snapshotFishCat(), true);
       g.history.tick(0, true);

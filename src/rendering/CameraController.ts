@@ -14,8 +14,10 @@ export class CameraController {
   readonly camera: THREE.PerspectiveCamera;
   mode: CameraMode = "orbit";
   yaw = Math.PI * 0.75;
-  pitch = 0.22;
-  distance = 4.6;
+  pitch = 0.12;
+  distance = 3.7;
+  /** Look slightly above the pivot so the street ahead fills the frame. */
+  lookLift = 0.38;
   baseFov = 62;
   sprintFov = 71;
   sensitivity = 0.0022;
@@ -100,7 +102,7 @@ export class CameraController {
 
   applyMouse(dx: number, dy: number): void {
     this.yaw -= dx * this.sensitivity;
-    this.pitch = clamp(this.pitch + dy * this.sensitivity, -0.35, 1.15);
+    this.pitch = clamp(this.pitch + dy * this.sensitivity, -0.3, 1.1);
   }
 
   /** Gentle auto-follow when the mouse isn't steering (no pointer lock). */
@@ -139,8 +141,8 @@ export class CameraController {
       const lambda = want < this.currentDistance ? 30 : 3.5;
       this.currentDistance = damp(this.currentDistance, want, lambda, dt);
       this.camera.position.copy(this.pivot).addScaledVector(dir, this.currentDistance);
-      // Keep the camera above the ground it is looking past.
       this.lookTarget.copy(this.pivot);
+      this.lookTarget.y += this.lookLift * Math.max(0, 1 - this.pitch * 1.4);
     } else if (this.mode === "orbit") {
       const a = this.time * this.orbitSpeed + 0.6;
       const desired = this.tmp.set(

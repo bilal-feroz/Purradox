@@ -439,9 +439,11 @@ export class CatAnimator {
     const n = rig.tail.length;
     const action = inp.action;
     const moving = inp.speed > 0.25;
-    let base = moving ? 0.62 * gw.walk + 0.3 * gw.trot + 0.12 * gw.gallop : 0.9;
-    let curl = moving ? P.tailCurl * 0.15 : P.tailCurl * 0.42;
-    let swayAmp = moving ? 0.1 + 0.08 * gw.trot : 0.2;
+    // Relaxed "J": the tail leaves the rump slightly low, then curls up.
+    const idleCurl = 0.2 + 0.14 * P.tailCurl;
+    let base = moving ? 0.2 * gw.walk + 0.1 * gw.trot + 0.04 * gw.gallop : -0.22;
+    let curl = moving ? (0.11 * gw.walk + 0.03 * gw.trot) * (1 + P.tailCurl) : idleCurl;
+    let swayAmp = moving ? 0.1 + 0.08 * gw.trot : 0.18;
     let swayFreq = moving ? 3 + inp.speed * 0.6 : 1.3;
     if (!inp.grounded) {
       base = 0.55;
@@ -469,7 +471,7 @@ export class CatAnimator {
     for (let i = 0; i < n; i++) {
       const seg = rig.tail[i];
       const u = i / (n - 1);
-      let rx = i === 0 ? base : curl * (0.4 + u);
+      let rx = i === 0 ? base : curl * (0.55 + u * 0.7);
       let ry = Math.sin(this.time * swayFreq - i * 0.65) * swayAmp * (0.35 + u);
       if (action === "crouch" && i >= n - 2) ry += Math.sin(this.time * 14) * 0.35;
       if (sit > 0.01) {

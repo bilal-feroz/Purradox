@@ -1,4 +1,4 @@
-import RAPIER from "@dimforge/rapier3d-compat";
+import type RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { GROUP_QUERY_WORLD, GROUP_WORLD } from "./CollisionLayers";
 
@@ -17,21 +17,24 @@ export interface RayHit {
  * movement code, so the world only needs to keep its query structures fresh.
  */
 export class PhysicsWorld {
+  /** Rapier (with its inlined WebAssembly) is loaded as a separate chunk. */
   static async create(): Promise<PhysicsWorld> {
-    await RAPIER.init();
-    return new PhysicsWorld();
+    const mod = await import("@dimforge/rapier3d-compat");
+    const R = mod.default;
+    await R.init();
+    return new PhysicsWorld(R);
   }
 
-  readonly R: Rapier = RAPIER;
   readonly world: RAPIER.World;
   private readonly staticBody: RAPIER.RigidBody;
-  private readonly tmpRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+  private readonly tmpRay: RAPIER.Ray;
   staticColliderCount = 0;
 
-  private constructor() {
-    this.world = new RAPIER.World({ x: 0, y: 0, z: 0 });
+  private constructor(readonly R: Rapier) {
+    this.world = new R.World({ x: 0, y: 0, z: 0 });
     this.world.timestep = 1 / 60;
-    this.staticBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    this.staticBody = this.world.createRigidBody(R.RigidBodyDesc.fixed());
+    this.tmpRay = new R.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
   }
 
   step(dt: number): void {
@@ -50,7 +53,7 @@ export class PhysicsWorld {
     rotY = 0,
     groupsOverride = GROUP_WORLD,
   ): RAPIER.Collider {
-    const desc = RAPIER.ColliderDesc.cuboid(Math.max(hx, 0.01), Math.max(hy, 0.01), Math.max(hz, 0.01))
+    const desc = this.R.ColliderDesc.cuboid(Math.max(hx, 0.01), Math.max(hy, 0.01), Math.max(hz, 0.01))
       .setTranslation(cx, cy, cz)
       .setCollisionGroups(groupsOverride)
       .setFriction(0);
@@ -64,7 +67,7 @@ export class PhysicsWorld {
 
   /** Static box with an arbitrary rotation (used for ramps). */
   addOrientedBox(center: THREE.Vector3, half: THREE.Vector3, rotation: THREE.Quaternion): RAPIER.Collider {
-    const desc = RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z)
+    const desc = this.R.ColliderDesc.cuboid(half.x, half.y, half.z)
       .setTranslation(center.x, center.y, center.z)
       .setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w })
       .setCollisionGroups(GROUP_WORLD)
@@ -74,7 +77,7 @@ export class PhysicsWorld {
   }
 
   addCylinder(cx: number, cy: number, cz: number, halfHeight: number, radius: number): RAPIER.Collider {
-    const desc = RAPIER.ColliderDesc.cylinder(halfHeight, radius)
+    const desc = this.R.ColliderDesc.cylinder(halfHeight, radius)
       .setTranslation(cx, cy, cz)
       .setCollisionGroups(GROUP_WORLD)
       .setFriction(0);

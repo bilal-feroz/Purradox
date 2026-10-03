@@ -38,10 +38,15 @@ async function main(): Promise<void> {
     for (let i = 0; i < frames; i++) game.frame(game.time.lastStamp + dt * 1000);
     return game.fsm.state;
   };
-  if (new URLSearchParams(location.search).get("debug") === "1") {
+  const params = new URLSearchParams(location.search);
+  if (params.get("debug") === "1") {
     const { Autopilot } = await import("./debug/Autopilot");
-    (window as unknown as { __autopilot: unknown }).__autopilot = new Autopilot(game);
+    const { TestHarness } = await import("./debug/TestHarness");
+    const ap = new Autopilot(game);
+    (window as unknown as { __autopilot: unknown }).__autopilot = ap;
+    (window as unknown as { __test: unknown }).__test = new TestHarness(game, ap);
   }
+  if (params.get("autopause") === "0") game.autoPause = false;
   const loop = (now: number) => {
     game.frame(now);
     requestAnimationFrame(loop);

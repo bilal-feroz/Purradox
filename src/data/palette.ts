@@ -10,7 +10,7 @@ export const PALETTE = {
   plasterPeach: 0xe9b98e,
   plasterOchre: 0xe3b45f,
   plasterCoral: 0xe39a7c,
-  cobble: 0xe3cfab,
+  cobble: 0xddc49c,
   cobbleDark: 0xbfa27a,
   grout: 0xa88b66,
   terracotta: 0xc8613f,

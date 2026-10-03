@@ -10,7 +10,8 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    chunkSizeWarningLimit: 4096,
+    // Rapier's compat build inlines its WebAssembly (~4.3 MB, lazy-loaded chunk).
+    chunkSizeWarningLimit: 4600,
     sourcemap: false,
   },
   test: {

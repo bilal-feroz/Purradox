@@ -127,6 +127,10 @@ export class Game {
   paused = false;
   /** Automation can skip rendering while fast-stepping the simulation. */
   renderEnabled = true;
+  /** Pause on focus loss / pointer-lock loss (disabled by automated tests). */
+  autoPause = true;
+  /** Debug/art-review camera override. */
+  photoCamera: THREE.Camera | null = null;
   settings: Settings;
   private lastZoneIndex = 0;
   private dustTimer = 0;
@@ -411,17 +415,17 @@ export class Game {
       if (this.isGameplay() && !this.paused) this.input.requestPointerLock();
     });
     this.input.onPointerLockChange((locked) => {
-      if (!locked && this.isGameplay() && !this.paused && this.time.realTime > 1) this.setPaused(true);
+      if (!locked && this.autoPause && this.isGameplay() && !this.paused && this.time.realTime > 1) this.setPaused(true);
     });
     window.addEventListener("keydown", (e) => {
       if (e.code === "Escape" && this.isGameplay()) this.setPaused(!this.paused);
       if (e.code === "KeyF" && !this.isGameplay()) document.documentElement.requestFullscreen?.().catch(() => undefined);
     });
     window.addEventListener("blur", () => {
-      if (this.isGameplay() && !this.paused) this.setPaused(true);
+      if (this.autoPause && this.isGameplay() && !this.paused) this.setPaused(true);
     });
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden && this.isGameplay() && !this.paused) this.setPaused(true);
+      if (document.hidden && this.autoPause && this.isGameplay() && !this.paused) this.setPaused(true);
     });
     this.fsm.onChange((to) => {
       this.debug?.log(`state → ${to}`);
@@ -688,7 +692,7 @@ export class Game {
     if (this.input.pointerLocked) this.camera.applyMouse(this.input.mouseDX, this.input.mouseDY);
     else if (this.input.idleLook > 1.2) this.camera.autoFollow(ctl.yaw, Math.hypot(ctl.velocity.x, ctl.velocity.z), dt);
     const target = this.tmp.copy(ctl.position);
-    target.y += 0.85;
+    target.y += 0.78;
     this.camera.update(dt, target, this.physics, 10 + this.camera.sprintBlend * 6);
   }
 
@@ -707,7 +711,7 @@ export class Game {
     this.audio.setListener(this.camera.camera.position);
     this.audio.update(this.time.realDt, !this.fsm.is(GameState.BOOT));
     this.debug?.update();
-    if (this.renderEnabled) this.renderer.render(this.scene, this.camera.camera, this.time.realTime);
+    if (this.renderEnabled) this.renderer.render(this.scene, this.photoCamera ?? this.camera.camera, this.time.realTime);
     this.input.endFrame(this.time.realDt);
   }
 

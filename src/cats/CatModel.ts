@@ -240,19 +240,21 @@ export function buildCat(def: CatDef, mats: CatMaterials): CatRig {
   const hb = P.bodyHeight;
   const torsoGeo = loft(
     [
-      [-L * 0.53, R * 0.42, R * 0.46 * hb, R * 0.14],
-      [-L * 0.47, R * 0.84, R * 0.9 * hb, R * 0.08],
+      [-L * 0.54, R * 0.36, R * 0.4 * hb, R * 0.16],
+      [-L * 0.5, R * 0.74, R * 0.8 * hb, R * 0.1],
+      [-L * 0.42, R * 0.93, R * 0.97 * hb, R * 0.04],
       [-L * 0.26, R * 1.0, R * 1.0 * hb, 0],
-      [0, R * 0.92, R * 0.93 * hb, -R * 0.04],
-      [L * 0.26, R * 1.02, R * 1.06 * hb, R * 0.04],
-      [L * 0.44, R * 0.86, R * 0.92 * hb, R * 0.2],
-      [L * 0.53, R * 0.5, R * 0.56 * hb, R * 0.42],
+      [0, R * 0.93, R * 0.94 * hb, -R * 0.04],
+      [L * 0.24, R * 1.02, R * 1.06 * hb, R * 0.03],
+      [L * 0.38, R * 0.95, R * 1.0 * hb, R * 0.12],
+      [L * 0.47, R * 0.78, R * 0.84 * hb, R * 0.26],
+      [L * 0.54, R * 0.46, R * 0.52 * hb, R * 0.44],
     ],
-    9,
+    10,
   );
   body.add(meshOf(lowPoly(torsoGeo, paint.torso, { variance: 0.05, seed: 3 }), mats.fur, meshes));
   if (def.pattern !== "calico") {
-    const fluff = lowPoly(place(ico(R * 0.6, 0), 0, -R * 0.15, L * 0.42, 0, 0, 0, 1, 1.15, 0.8), C.light, { variance: 0.06, jitter: R * 0.06, seed: 5 });
+    const fluff = lowPoly(place(ico(R * 0.56, 1), 0, -R * 0.1, L * 0.36, 0, 0.35, 0, 0.95, 1.05, 0.62), C.light, { variance: 0.05, jitter: R * 0.04, seed: 5 });
     body.add(meshOf(fluff, mats.fur, meshes));
   }
 
@@ -269,9 +271,9 @@ export function buildCat(def: CatDef, mats: CatMaterials): CatRig {
   neck.add(head);
 
   const headParts: THREE.BufferGeometry[] = [];
-  headParts.push(lowPoly(place(sphere(H, 9, 7), 0, 0, 0, 0, 0, 0, 1.08, 0.9, 0.94), paint.head, { variance: 0.05, seed: 11 }));
+  headParts.push(lowPoly(place(sphere(H, 11, 8), 0, 0, 0, 0, 0, 0, 1.08, 0.9, 0.94), paint.head, { variance: 0.045, seed: 11 }));
   for (const sx of [1, -1]) {
-    headParts.push(lowPoly(place(ico(H * 0.5, 0), sx * H * 0.62, -H * 0.34, H * 0.22, 0, 0, sx * 0.3, 1.05, 0.8, 0.9), paint.cheek, { variance: 0.05, seed: 13 + sx }));
+    headParts.push(lowPoly(place(ico(H * 0.42, 1), sx * H * 0.56, -H * 0.36, H * 0.16, 0, 0, sx * 0.3, 1.05, 0.78, 0.88), paint.cheek, { variance: 0.045, seed: 13 + sx }));
   }
   const M = P.muzzleSize;
   const muzzleZ = headSurfaceZ(H, 0, -H * 0.38) - M * 0.3;
@@ -306,15 +308,15 @@ export function buildCat(def: CatDef, mats: CatMaterials): CatRig {
   const E = P.eyeSize;
   const makeEye = (sx: number): THREE.Group => {
     const g = new THREE.Group();
-    const ex = sx * H * 0.41;
+    const ex = sx * H * 0.38;
     const ey = H * 0.06;
-    g.position.set(ex, ey, headSurfaceZ(H, ex, ey) - E * 0.12);
-    g.rotation.set(-0.08, sx * 0.4, 0);
+    g.position.set(ex, ey, headSurfaceZ(H, ex, ey) - E * 0.22);
+    g.rotation.set(-0.08, sx * 0.32, 0);
     const parts = [
-      lowPoly(place(sphere(E * 1.13, 8, 6), 0, 0, -E * 0.08, 0, 0, 0, 1, 1.12, 0.42), shade(def.pattern === "smoky" ? 0x1a1817 : C.dark, 0.55), { variance: 0 }),
-      lowPoly(place(sphere(E, 8, 6), 0, 0, 0, 0, 0, 0, 1, 1.1, 0.45), C.eye, { variance: 0.07 }),
-      lowPoly(place(sphere(E * 0.55, 7, 5), 0, -E * 0.04, E * 0.3, 0, 0, 0, 0.8, 1.15, 0.4), 0x14100d, { variance: 0 }),
-      lowPoly(place(ico(E * 0.2, 0), -sx * E * 0.32, E * 0.42, E * 0.46), 0xffffff, { variance: 0 }),
+      lowPoly(place(sphere(E * 1.06, 8, 6), 0, 0, -E * 0.08, 0, 0, 0, 1, 1.1, 0.32), shade(def.pattern === "smoky" ? 0x1a1817 : C.dark, 0.55), { variance: 0 }),
+      lowPoly(place(sphere(E, 8, 6), 0, 0, 0, 0, 0, 0, 1, 1.1, 0.4), C.eye, { variance: 0.07 }),
+      lowPoly(place(sphere(E * 0.58, 7, 5), 0, -E * 0.04, E * 0.24, 0, 0, 0, 0.8, 1.15, 0.36), 0x14100d, { variance: 0 }),
+      lowPoly(place(ico(E * 0.2, 0), -sx * E * 0.3, E * 0.4, E * 0.4), 0xffffff, { variance: 0 }),
     ];
     g.add(meshOf(merge(parts), mats.eye, meshes));
     return g;

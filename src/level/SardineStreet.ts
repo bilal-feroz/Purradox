@@ -60,7 +60,7 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
   // ------------------------------------------------------------------ helpers
   const building = (o: BuildingOpts): void => {
     const color = o.color ?? rng.pick(FACADES);
-    b.block(o.x0, o.x1, o.base - 3, o.top, o.z0, o.z1, stone(color, o.base), { cell: 1.1 });
+    b.block(o.x0, o.x1, o.base - 3, o.top, o.z0, o.z1, stone(color, o.base), { cell: 1.7 });
     // cornice
     b.block(o.x0 - 0.12, o.x1 + 0.12, o.top - 0.18, o.top, o.z0 - 0.12, o.z1 + 0.12, shade(color, 1.06), { collider: false });
     const roof = o.roof ?? "flat";
@@ -157,7 +157,7 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
 
   const slab = (x0: number, x1: number, z0: number, z1: number, top: number, color: number = PALETTE.grout, bottom = H.sea - 1): void => {
     const cliff = stone(PALETTE.cliff, bottom);
-    b.block(x0, x1, bottom, top, z0, z1, (c, n, f) => (n.y > 0.5 ? color : cliff(c, n, f)), { cell: 1.6 });
+    b.block(x0, x1, bottom, top, z0, z1, (c, n, f) => (n.y > 0.5 ? color : cliff(c, n, f)), { cell: 3.2 });
   };
 
   // =================================================================== 1. FISH MARKET (y = 0)
@@ -267,7 +267,7 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
   P.awning(b, 8.9, 3.3, -2.1, "s", 3.2, 2.6, 0.5, "teal", true);
   for (const px of [7.4, 10.4]) b.block(px - 0.06, px + 0.06, H.exit, 3.3, -2.16, -2.04, PALETTE.woodDark, { collider: false });
   // terrace wall separating the yard from the courtyard
-  b.block(-2, 12, H.exit - 0.2, 3.4, -6.5, -4, stone(PALETTE.stoneWarm, H.exit), { cell: 1.1 });
+  b.block(-2, 12, H.exit - 0.2, 3.4, -6.5, -4, stone(PALETTE.stoneWarm, H.exit), { cell: 1.7 });
   flagstones(-2, 12, -6.5, -4, 3.4, 0.9, PALETTE.stoneCream);
   P.pot(b, -1.2, 3.4, -5.3, 0.9, "flower", true);
   P.pot(b, 11.2, 3.4, -5.3, 0.9, "leafy", true);
@@ -337,8 +337,8 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
 
   // =================================================================== 6. LAUNDRY ROOFTOPS (y = 5.0)
   const roofColor = PALETTE.stoneCream;
-  b.block(6, 39, H.court - 3, H.roof, -64, -37, stone(PALETTE.stoneWarm, H.court), { cell: 1.1 });
-  b.block(39, 47, H.court - 3, H.roof, -64, -47, stone(PALETTE.plasterPeach, H.court), { cell: 1.1 });
+  b.block(6, 39, H.court - 3, H.roof, -64, -37, stone(PALETTE.stoneWarm, H.court), { cell: 1.7 });
+  b.block(39, 47, H.court - 3, H.roof, -64, -47, stone(PALETTE.plasterPeach, H.court), { cell: 1.7 });
   flagstones(6, 39, -64, -37, H.roof, 1.3, roofColor);
   flagstones(39, 47, -64, -47, H.roof, 1.3, roofColor);
   // west face facade (second alley side)
@@ -395,9 +395,9 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
   }
 
   // =================================================================== Shortcut B — low roofs
-  b.block(34, 40, H.court - 3, 3.4, -38, -28, stone(PALETTE.plasterOchre, H.court), { cell: 1.1 });
+  b.block(34, 40, H.court - 3, 3.4, -38, -28, stone(PALETTE.plasterOchre, H.court), { cell: 1.7 });
   flagstones(34, 40, -38, -28, 3.4, 1.0, PALETTE.terracottaLight);
-  b.block(39, 47, H.court - 3, 4.3, -47, -37.5, stone(PALETTE.stoneSand, H.court), { cell: 1.1 });
+  b.block(39, 47, H.court - 3, 4.3, -47, -37.5, stone(PALETTE.stoneSand, H.court), { cell: 1.7 });
   flagstones(39, 47, -47, -37.5, 4.3, 1.0, PALETTE.terracottaLight);
   P.parapet(b, 39.6, 40, -37.5, -28, 3.4, 0.4);
   P.parapet(b, 46.6, 47, -47, -37.5, 4.3, 0.4);
@@ -407,16 +407,16 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
   P.vine(b, 34, H.court, -28.6, "w", 1.1);
 
   // =================================================================== 7. FINAL CLIMB
-  b.block(47, 58, H.sea - 1, H.roof, -72, -47, stone(PALETTE.stoneCream, H.court), { cell: 1.1 });
+  b.block(47, 58, H.sea - 1, H.roof, -72, -47, stone(PALETTE.stoneCream, H.court), { cell: 1.7 });
   flagstones(47, 58, -72, -47, H.roof, 1.3, roofColor);
-  b.block(48.5, 56.5, H.roof, H.climb, -64, -55.5, stone(PALETTE.plasterPeach, H.roof), { cell: 1.0 });
+  b.block(48.5, 56.5, H.roof, H.climb, -64, -55.5, stone(PALETTE.plasterPeach, H.roof), { cell: 1.6 });
   flagstones(48.5, 56.5, -64, -55.5, H.climb, 1.0, PALETTE.terracottaLight);
   P.crate(b, 47.3, H.roof, -58.6, 0.05, 0.86);
   P.acUnit(b, 51, H.climb, -57.4, "s");
   P.antenna(b, 55.6, H.climb, -56.4, 2.4);
   P.pot(b, 55.5, H.climb, -63, 0.9, "flower", true);
   // ledge + plank to the final jump
-  b.block(51, 55, H.roof, 6.1, -69, -66.5, stone(PALETTE.stoneWarm, H.roof), { cell: 0.9 });
+  b.block(51, 55, H.roof, 6.1, -69, -66.5, stone(PALETTE.stoneWarm, H.roof), { cell: 1.4 });
   const plankLen = Math.hypot(2.5, 0.2);
   const plank = lowPoly(box(1.3, 0.12, plankLen, 3, 1, 3), (c) => (Math.abs(c.x) % 0.43 < 0.04 ? PALETTE.woodDark : PALETTE.woodHoney), { variance: 0.06 });
   place(plank, 53, (H.climb + 6.1) / 2, -65.25, 0, Math.atan2(0.2, 2.5));
@@ -431,7 +431,7 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
   P.wallLamp(b, 51, 5.2, -66.5, "s");
 
   // =================================================================== 8. SAFE ROOFTOP (y = 6.6)
-  b.block(49, 65, H.sea - 1, H.safe, -85, -70.5, stone(PALETTE.stoneCream, H.court), { cell: 1.2 });
+  b.block(49, 65, H.sea - 1, H.safe, -85, -70.5, stone(PALETTE.stoneCream, H.court), { cell: 1.8 });
   flagstones(49, 65, -85, -70.5, H.safe, 1.2, PALETTE.potCream);
   P.parapet(b, 49, 65, -85, -84.6, H.safe, 0.5);
   P.parapet(b, 64.6, 65, -84.6, -70.5, H.safe, 0.5);
@@ -456,7 +456,7 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
 
   // =================================================================== Sea, cliffs, harbor
   // landmass skirt below the courtyard/alley east edge
-  b.block(37.4, 41, H.sea - 1, H.court - 1.1, -28, 23, stone(PALETTE.cliff, H.sea), { cell: 1.6 });
+  b.block(37.4, 41, H.sea - 1, H.court - 1.1, -28, 23, stone(PALETTE.cliff, H.sea), { cell: 3.2 });
   for (let i = 0; i < 26; i++) {
     const z = -30 + i * 2.2;
     P.rock(b, 41.5 + rng.range(-0.6, 1.5), H.sea + rng.range(-0.4, 0.6), z + rng.range(-0.8, 0.8), rng.range(1.0, 2.0), false);
@@ -499,7 +499,7 @@ export function buildSardineStreet(scene: THREE.Scene, physics: PhysicsWorld, ma
   ];
   for (const [x0, x1, z0, z1, top] of skyline) {
     const col = rng.pick(FACADES);
-    b.block(x0, x1, -3, top, z0, z1, stone(col, 0), { collider: false, cell: 2.2 });
+    b.block(x0, x1, -3, top, z0, z1, stone(col, 0), { collider: false, cell: 3.6 });
     if (rng.chance(0.6)) P.tileRoof(b, x0, x1, z0, z1, top, rng.chance(0.5));
   }
 

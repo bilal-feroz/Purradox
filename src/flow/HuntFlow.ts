@@ -163,8 +163,9 @@ export function registerHuntFlow(g: Game): void {
       g.renderer.temporalUniforms.uEdge.value = 0.35;
       g.renderer.temporalUniforms.uFreeze.value = 0;
       g.temporalVignette.classList.add("show");
-      g.camera.snapBehind(hunter.yaw, hunter.position.clone().setY(hunter.position.y + 0.85));
-      g.camera.pitch = 0.22;
+      g.camera.snapBehind(hunter.yaw, hunter.position.clone().setY(hunter.position.y + 0.78));
+      g.camera.pitch = 0.14;
+      g.camera.distance = 3.9;
       g.input.requestPointerLock();
       hunter.meow();
       t = 0;
