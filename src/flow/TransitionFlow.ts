@@ -23,6 +23,7 @@ export function registerTransitionFlow(g: Game): void {
   let resolved: TacticalPlan | null = null;
   let streak: THREE.Mesh | null = null;
   let streakCount = 0;
+  let head: THREE.Mesh | null = null;
   let historyEnd = 0;
   let moteTimer = 0;
   let done = false;
@@ -38,15 +39,23 @@ export function registerTransitionFlow(g: Game): void {
       pending.then((p) => {
         resolved = p;
       });
+      g.stamps.place("high");
       g.stamps.show("THE ALLEY COUNCIL", "council", true);
       g.stamps.show("IS PLOTTING…", "council", true);
       g.audio.play("stamp", { volume: 0.45 });
-      // huddle: the three rivals turn to each other
+      // huddle: the three rivals gather in a little circle and plot
       const center = new THREE.Vector3();
       for (const id of RIVAL_IDS) center.add(g.rivals[id].position);
       center.divideScalar(3);
-      for (const id of RIVAL_IDS) g.rivals[id].lookTarget = center.clone().setY(center.y + 0.5);
-      g.camera.setCinematic(new THREE.Vector3(center.x, center.y + 2.4, center.z + 4.4), center.clone().setY(center.y + 0.5), 1.4);
+      RIVAL_IDS.forEach((id, i) => {
+        const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
+        const p = new THREE.Vector3(center.x + Math.cos(a) * 0.8, center.y, center.z + Math.sin(a) * 0.8);
+        const r = g.rivals[id];
+        r.teleport(p, Math.atan2(center.x - p.x, center.z - p.z));
+        r.setForcedAction("sit");
+        r.lookTarget = center.clone().setY(center.y + 0.45);
+      });
+      g.camera.setCinematic(new THREE.Vector3(center.x + 1.6, center.y + 2.3, center.z + 3.6), center.clone().setY(center.y + 0.35), 1.6);
     },
     update: (dt) => {
       t += dt;
@@ -87,6 +96,7 @@ export function registerTransitionFlow(g: Game): void {
       g.input.exitPointerLock();
       g.echo.stop();
       g.stamps.clear(false);
+      g.stamps.place("high");
       g.stamps.show("REWINDING…", "rewinding");
       g.audio.play("rewind", { volume: 0.7, duration: REWIND_SECONDS });
       g.audio.setMusic("off");
@@ -115,7 +125,7 @@ export function registerTransitionFlow(g: Game): void {
         if (pts.length > 3) {
           const curve = new THREE.CatmullRomCurve3(pts);
           const segs = Math.min(1600, pts.length * 3);
-          const geo = new THREE.TubeGeometry(curve, segs, 0.06, 5, false);
+          const geo = new THREE.TubeGeometry(curve, segs, 0.2, 5, false);
           const mat = new THREE.MeshBasicMaterial({ color: PALETTE.seaGlass, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
           streak = new THREE.Mesh(geo, mat);
           streak.frustumCulled = false;
@@ -123,6 +133,14 @@ export function registerTransitionFlow(g: Game): void {
           streakCount = geo.index ? geo.index.count : 0;
         }
       }
+      if (!head) {
+        head = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.42, 1),
+          new THREE.MeshBasicMaterial({ color: PALETTE.seaGlass, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+        );
+        head.frustumCulled = false;
+      }
+      g.scene.add(head);
     },
     update: (dt) => {
       if (done) return;
@@ -146,12 +164,24 @@ export function registerTransitionFlow(g: Game): void {
         g.effects.reverseMotes(fc, 3, 2.4);
         for (const id of RIVAL_IDS) g.effects.reverseMotes(g.rivals[id].position, 1, 1.4);
       }
-      g.camera.setCinematic(new THREE.Vector3(fc.x + 7, fc.y + 9.5, fc.z + 9), new THREE.Vector3(fc.x, fc.y + 0.5, fc.z), 2.6);
+      g.effects.sparkle(fc.clone().setY(fc.y + 0.4), 2, 0x7ff3dc, 1.6, 0.6);
+      if (head) {
+        head.position.set(fc.x, fc.y + 0.55, fc.z);
+        head.scale.setScalar(0.9 + Math.sin(t * 30) * 0.15);
+      }
+      // High diorama view: the whole street runs backwards at once.
+      const k = Math.min(1, u * 1.6);
+      g.camera.setCinematic(
+        new THREE.Vector3(14 + 18 * k, 26 + 22 * k, 6 + 22 * k),
+        new THREE.Vector3(fc.x * (1 - k) + 8 * k, fc.y * (1 - k), fc.z * (1 - k) - 24 * k),
+        2.4,
+      );
       g.camera.update(dt, null, null);
       if (u >= 1) {
         done = true;
         streak?.removeFromParent();
         streak = null;
+        head?.removeFromParent();
         g.resetWorld();
         g.renderer.temporalUniforms.uAmount.value = 0;
         g.fsm.transition(GameState.CAT_SELECTION);

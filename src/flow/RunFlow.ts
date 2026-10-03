@@ -200,6 +200,7 @@ export function registerRunFlow(g: Game): void {
         });
         const fc = g.fishCat.position;
         g.camera.setCinematic(new THREE.Vector3(52.6, 7.25, -57.2), new THREE.Vector3(fc.x, fc.y + 0.6, fc.z), 3, true);
+        g.stamps.place("low");
         g.stamps.show("BUT SOMEONE ELSE", "watching", true);
         g.stamps.show("WAS WATCHING.", "watching", true);
         g.audio.play("stamp", { volume: 0.5 });
@@ -216,6 +217,11 @@ export function registerRunFlow(g: Game): void {
     exit: () => {
       g.stamps.clear();
     },
+  });
+
+  // stamps default to center placement whenever a new flow phase begins
+  g.fsm.onChange((to) => {
+    if (to !== GameState.FISH_RUN_COMPLETE && to !== GameState.ANALYZE_RUN) g.stamps.place("center");
   });
 
   void SPAWN;

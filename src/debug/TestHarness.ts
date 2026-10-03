@@ -14,8 +14,15 @@ export class TestHarness {
     private readonly ap: Autopilot,
   ) {}
 
+  /** Take over (or release) the frame clock for deterministic scripted runs. */
+  manual(on = true): void {
+    this.g.manualStepping = on;
+    this.g.autoPause = !on;
+  }
+
   step(frames: number, render = false): void {
     const g = this.g;
+    this.manual(true);
     const prev = g.renderEnabled;
     g.renderEnabled = render;
     for (let i = 0; i < frames; i++) g.frame(g.time.lastStamp + 1000 / 60);
@@ -133,6 +140,24 @@ export class TestHarness {
     g.photoCamera = cam;
     g.renderEnabled = true;
     this.step(2, true);
+  }
+
+  /** Round 2 art check: hunter behind/beside Past You at a replay time. */
+  huntShot(echoTime: number, back = 4.2, side = 1.4, scent = true): string {
+    const g = this.g;
+    this.stepUntil(() => g.echo.time >= echoTime || !g.echo.running, 4000);
+    const pc = g.fishCat;
+    const h = g.controlled!;
+    const fx = Math.sin(pc.yaw);
+    const fz = Math.cos(pc.yaw);
+    h.teleport(new THREE.Vector3(pc.position.x - fx * back + fz * side, pc.position.y, pc.position.z - fz * back - fx * side), pc.yaw);
+    g.camera.snapBehind(h.yaw, h.position.clone().setY(h.position.y + 0.78));
+    if (scent) {
+      h.abilities.scentCooldown = 0;
+      g.input.press("scent");
+    }
+    this.step(18, true);
+    return `${g.echo.time.toFixed(2)}s prints=${g.prints.mesh.count}`;
   }
 
   /** Put the hunter in front of Past You and pounce at a given echo time. */

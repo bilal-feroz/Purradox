@@ -44,9 +44,9 @@ void main() {
   // Freeze: warm desaturation for the RUN COMPLETE beat
   col = mix(col, desat(col, 0.55) * vec3(1.04, 1.0, 0.94), uFreeze * 0.85);
   // Rewind: cool sea-glass wash, gently desaturated
-  vec3 rw = desat(col, 0.45);
-  rw = mix(rw, rw * seaGlass * 1.18 + vec3(0.02, 0.05, 0.06), 0.55);
-  col = mix(col, rw, uAmount * 0.85);
+  vec3 rw = desat(col, 0.3);
+  rw = mix(rw, rw * seaGlass * 1.15 + vec3(0.02, 0.05, 0.06), 0.4);
+  col = mix(col, rw, uAmount * 0.78);
   col += seaGlass * bandMask * 0.10;
   // Edge glow for temporal states
   float edge = smoothstep(0.38, 0.78, r);

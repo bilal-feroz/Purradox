@@ -16,6 +16,8 @@ export class Stamps {
   }
 
   show(text: string, kind: StampKind, small = false, sub?: string): HTMLDivElement {
+    // Anything already animating out is dropped immediately (no overlaps).
+    for (const k of [...this.root.children] as HTMLElement[]) if (k.classList.contains("out")) k.remove();
     const s = el("div", `stamp brush ${kind}${small ? " small" : ""}`);
     s.textContent = text;
     this.root.appendChild(s);
@@ -24,6 +26,12 @@ export class Stamps {
       this.root.appendChild(p);
     }
     return s;
+  }
+
+  /** Vertical placement for the next stamps. */
+  place(where: "center" | "low" | "high"): void {
+    this.root.classList.toggle("low", where === "low");
+    this.root.classList.toggle("high", where === "high");
   }
 
   clear(animated = true): void {

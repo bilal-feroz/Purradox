@@ -41,34 +41,63 @@ function pawGeometry(): THREE.BufferGeometry {
   return merged;
 }
 
+const VERT = /* glsl */ `
+attribute vec4 aTint;
+varying vec4 vTint;
+void main() {
+  vTint = aTint;
+  vec4 p = vec4(position, 1.0);
+  #ifdef USE_INSTANCING
+    p = instanceMatrix * p;
+  #endif
+  gl_Position = projectionMatrix * modelViewMatrix * p;
+}
+`;
+
+const FRAG = /* glsl */ `
+varying vec4 vTint;
+void main() {
+  gl_FragColor = vTint;
+  #include <colorspace_fragment>
+}
+`;
+
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
-const _c = new THREE.Color();
 const _up = new THREE.Vector3(0, 1, 0);
+const _c = new THREE.Color();
 
 /**
  * Sea-glass glowing pawprints (Scent Memory + Past You residue) on one
- * additive instanced mesh. Intensity encodes fade (additive black = gone).
+ * instanced mesh with per-instance tint + alpha, so prints stay readable on
+ * the bright cream stone instead of washing out.
  */
 export class PawPrints {
   readonly mesh: THREE.InstancedMesh;
   private readonly prints: Print[] = [];
-  private readonly color = new THREE.Color(PALETTE.seaGlass);
+  private readonly tints: Float32Array;
+  private readonly tintAttr: THREE.InstancedBufferAttribute;
+  private readonly core = new THREE.Color(PALETTE.seaGlassDeep);
+  private readonly glow = new THREE.Color(PALETTE.seaGlass);
 
-  constructor(scene: THREE.Scene, count = 128) {
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
+  constructor(scene: THREE.Scene, count = 160) {
+    const geo = pawGeometry();
+    this.tints = new Float32Array(count * 4);
+    this.tintAttr = new THREE.InstancedBufferAttribute(this.tints, 4);
+    this.tintAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute("aTint", this.tintAttr);
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: VERT,
+      fragmentShader: FRAG,
       transparent: true,
-      blending: THREE.AdditiveBlending,
       depthWrite: false,
-      toneMapped: false,
       polygonOffset: true,
       polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
     });
-    this.mesh = new THREE.InstancedMesh(pawGeometry(), mat, count);
+    this.mesh = new THREE.InstancedMesh(geo, mat, count);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.setColorAt(0, new THREE.Color(0, 0, 0));
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 5;
@@ -80,11 +109,9 @@ export class PawPrints {
 
   add(x: number, y: number, z: number, yaw: number, intensity: number, life: number, delay = 0, scale = 1): void {
     let p = this.prints.find((q) => !q.alive);
-    if (!p) {
-      p = this.prints.reduce((a, b) => (a.life / a.maxLife > b.life / b.maxLife ? a : b));
-    }
+    if (!p) p = this.prints.reduce((a, b) => (a.life / a.maxLife > b.life / b.maxLife ? a : b));
     p.alive = true;
-    p.pos.set(x, y + 0.035, z);
+    p.pos.set(x, y + 0.03, z);
     p.yaw = yaw;
     p.life = 0;
     p.maxLife = life;
@@ -112,21 +139,25 @@ export class PawPrints {
         continue;
       }
       const t = p.life / p.maxLife;
-      const fadeIn = Math.min(1, p.life / 0.18);
-      const fadeOut = 1 - Math.pow(t, 2.2);
-      const shimmer = 0.85 + Math.sin(time * 7 + p.pos.x * 3 + p.pos.z * 2) * 0.15;
-      const k = p.intensity * fadeIn * fadeOut * shimmer;
+      const fadeIn = Math.min(1, p.life / 0.16);
+      const fadeOut = 1 - Math.pow(t, 2.4);
+      const shimmer = 0.88 + Math.sin(time * 7 + p.pos.x * 3 + p.pos.z * 2) * 0.12;
+      const k = Math.min(1, p.intensity * fadeIn * fadeOut * shimmer);
       _q.setFromAxisAngle(_up, p.yaw);
-      const pop = 0.75 + 0.25 * Math.min(1, p.life / 0.22);
+      const pop = 0.7 + 0.3 * Math.min(1, p.life / 0.2);
       _s.setScalar(p.scale * pop);
       _m.compose(p.pos, _q, _s);
       this.mesh.setMatrixAt(n, _m);
-      _c.copy(this.color).multiplyScalar(k * 1.6);
-      this.mesh.setColorAt(n, _c);
+      // brighter (lighter) when strong, deeper teal when faint
+      _c.copy(this.core).lerp(this.glow, k * 0.6);
+      this.tints[n * 4] = _c.r;
+      this.tints[n * 4 + 1] = _c.g;
+      this.tints[n * 4 + 2] = _c.b;
+      this.tints[n * 4 + 3] = k * 0.92;
       n++;
     }
     this.mesh.count = n;
     this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    this.tintAttr.needsUpdate = true;
   }
 }

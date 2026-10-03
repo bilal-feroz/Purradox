@@ -11,7 +11,7 @@ import { emptySample, type ReplayData, type ReplayEvent } from "./ReplayTypes";
 
 const RIM_UNIFORMS = {
   rimColor: { value: new THREE.Color(PALETTE.seaGlass) },
-  rimStrength: { value: 0.9 },
+  rimStrength: { value: 0.4 },
 };
 
 /** Clone a material and add a thin sea-glass fresnel rim (Past You look). */
@@ -25,7 +25,7 @@ function withRim(base: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
       .replace(
         "#include <emissivemap_fragment>",
         `#include <emissivemap_fragment>
-         float rimF = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 3.2);
+         float rimF = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 3.8);
          totalEmissiveRadiance += rimColor * rimF * rimStrength;`,
       );
   };
@@ -73,9 +73,11 @@ export class EchoController {
     this.echoFur = withRim(furMat);
     this.echoEye = withRim(eyeMat);
     for (const m of actor.rig.meshes) m.userData.baseMat = m.material;
-    const tints = [PALETTE.seaGlass, PALETTE.temporalPink, PALETTE.seaGlassDeep];
-    const delays = [0.06, 0.12, 0.19];
-    for (let i = 0; i < 3; i++) {
+    // Two faint, offset afterimages (sea-glass + pink) read as a subtle
+    // chromatic split while Past You moves — never a full ghost.
+    const tints = [PALETTE.seaGlass, PALETTE.temporalPink];
+    const delays = [0.09, 0.17];
+    for (let i = 0; i < 2; i++) {
       const mat = new THREE.MeshBasicMaterial({
         color: tints[i],
         transparent: true,
@@ -91,7 +93,7 @@ export class EchoController {
       }
       rig.root.visible = false;
       scene.add(rig.root);
-      this.ghosts.push({ rig, delay: delays[i], frames: 4 + i * 4, mat });
+      this.ghosts.push({ rig, delay: delays[i], frames: 5 + i * 5, mat });
     }
     const size = poseSize(actor.rig);
     for (let i = 0; i < 16; i++) this.poseRing.push(new Float32Array(size));
@@ -196,7 +198,7 @@ export class EchoController {
       this.player.sample(tPast, this.ghostSample);
       g.rig.root.position.set(this.ghostSample.position[0], this.ghostSample.position[1], this.ghostSample.position[2]);
       g.rig.root.rotation.y = this.ghostSample.rotationY;
-      g.mat.opacity = fade * (0.16 - g.delay * 0.4) + 0.02 * (this.running ? 1 : 0);
+      g.mat.opacity = fade * (g.delay < 0.12 ? 0.085 : 0.06);
     }
     // keep the main sample cursor consistent after ghost sampling
     this.player.sample(this.time, this.sample);
@@ -204,8 +206,8 @@ export class EchoController {
     // temporal motes + faint residue prints
     this.moteTimer -= dt;
     if (this.moteTimer <= 0) {
-      this.moteTimer = 0.07;
-      this.effects.motes(this.tmp.copy(this.actor.position).setY(this.actor.position.y + 0.35), 1, 0.45);
+      this.moteTimer = 0.11;
+      this.effects.motes(this.tmp.copy(this.actor.position).setY(this.actor.position.y + 0.35), 1, 0.4, PALETTE.seaGlass, 0.45);
     }
     if (this.actor.grounded) {
       for (const _leg of this.actor.animator.footDown) {
@@ -217,7 +219,7 @@ export class EchoController {
         void _leg;
       }
     }
-    RIM_UNIFORMS.rimStrength.value = 0.75 + Math.sin(time * 3.1) * 0.15;
+    RIM_UNIFORMS.rimStrength.value = 0.38 + Math.sin(time * 3.1) * 0.07;
   }
 
   private readonly ghostSample = emptySample();

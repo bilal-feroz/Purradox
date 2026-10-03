@@ -831,6 +831,16 @@ body {
   gap: 4px;
 }
 
+#stamps.low {
+  justify-content: flex-end;
+  padding-bottom: 9vh;
+}
+
+#stamps.high {
+  justify-content: flex-start;
+  padding-top: 11vh;
+}
+
 .stamp {
   font-size: clamp(42px, 6vw, 92px);
   letter-spacing: 2px;

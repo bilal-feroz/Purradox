@@ -48,7 +48,8 @@ async function main(): Promise<void> {
   }
   if (params.get("autopause") === "0") game.autoPause = false;
   const loop = (now: number) => {
-    game.frame(now);
+    // Automated tests can take over the clock (manual stepping).
+    if (!game.manualStepping) game.frame(now);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

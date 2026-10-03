@@ -131,6 +131,8 @@ export class Game {
   autoPause = true;
   /** Debug/art-review camera override. */
   photoCamera: THREE.Camera | null = null;
+  /** When true the rAF loop stops driving frames (test harness steps them). */
+  manualStepping = false;
   settings: Settings;
   private lastZoneIndex = 0;
   private dustTimer = 0;
@@ -636,7 +638,7 @@ export class Game {
       const ox = Math.cos(p.yaw) * 0.11 * side;
       const oz = -Math.sin(p.yaw) * 0.11 * side;
       side *= -1;
-      this.prints.add(p.x + ox, p.y, p.z + oz, p.yaw, intensity, 3.4, i * 0.035, 1.1);
+      this.prints.add(p.x + ox, p.y, p.z + oz, p.yaw, intensity, 3.4, i * 0.035, 1.5);
     });
     this.effects.ring(this.controlled ? this.controlled.position : this.fishCat.position, 2.2, PALETTE.seaGlass, 0.6);
     this.audio.play("scent", { volume: 0.5 });
