@@ -41,6 +41,43 @@ const _roll = new THREE.Quaternion();
 const _col = new THREE.Color();
 const _eul = new THREE.Euler();
 
+/** Comic burst with a "!" (UI bible palette). */
+function exclaimTexture(): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const g = c.getContext("2d")!;
+  g.translate(64, 64);
+  g.beginPath();
+  const spikes = 9;
+  for (let i = 0; i < spikes * 2; i++) {
+    const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
+    const r = i % 2 === 0 ? 58 : 40;
+    if (i === 0) g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.closePath();
+  g.fillStyle = "#f7cf55";
+  g.fill();
+  g.lineWidth = 7;
+  g.strokeStyle = "#22384a";
+  g.stroke();
+  g.fillStyle = "#22384a";
+  g.beginPath();
+  g.moveTo(-9, -32);
+  g.lineTo(9, -32);
+  g.lineTo(5, 10);
+  g.lineTo(-5, 10);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.arc(0, 24, 8, 0, Math.PI * 2);
+  g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function starGeometry(): THREE.BufferGeometry {
   const shape = new THREE.Shape();
   const pts = 4;
@@ -68,6 +105,8 @@ export class Effects {
   private readonly arcs: Array<{ mesh: THREE.Mesh; life: number; max: number; perfect: boolean }> = [];
   /** Expanding ground rings (landing, fish pickup, temporal). */
   private readonly rings: Array<{ mesh: THREE.Mesh; life: number; max: number; scale: number }> = [];
+  /** Comic "!" bursts telegraphing rival pounces. */
+  private readonly exclaims: Array<{ sprite: THREE.Sprite; life: number; max: number; follow: THREE.Vector3 | null }> = [];
 
   constructor(scene: THREE.Scene) {
     scene.add(this.group);
@@ -111,6 +150,14 @@ export class Effects {
       mesh.visible = false;
       this.group.add(mesh);
       this.arcs.push({ mesh, life: 0, max: 0.35, perfect: false });
+    }
+    const exTex = exclaimTexture();
+    for (let i = 0; i < 4; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: exTex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+      sprite.visible = false;
+      sprite.renderOrder = 20;
+      this.group.add(sprite);
+      this.exclaims.push({ sprite, life: 1, max: 1, follow: null });
     }
     for (let i = 0; i < 6; i++) {
       const geo = new THREE.RingGeometry(0.8, 1, 24);
@@ -430,6 +477,15 @@ export class Effects {
     arc.mesh.visible = true;
   }
 
+  /** Pop a "!" above a cat (follows `follow` if given). */
+  exclaim(follow: THREE.Vector3, life = 0.42): void {
+    const e = this.exclaims.find((x) => x.life >= x.max) ?? this.exclaims[0];
+    e.life = 0;
+    e.max = life;
+    e.follow = follow;
+    e.sprite.visible = true;
+  }
+
   ring(pos: THREE.Vector3, scale: number, color: number, life = 0.45): void {
     const r = this.rings.find((x) => x.life >= x.max) ?? this.rings[0];
     r.life = 0;
@@ -533,6 +589,16 @@ export class Effects {
       a.mesh.scale.set(s, s, s);
       (a.mesh.material as THREE.MeshBasicMaterial).opacity = (1 - t) * (a.perfect ? 0.95 : 0.6);
       if (a.life >= a.max) a.mesh.visible = false;
+    }
+    for (const e of this.exclaims) {
+      if (e.life >= e.max) continue;
+      e.life += dt;
+      const t = Math.min(1, e.life / e.max);
+      const pop = t < 0.25 ? 0.4 + (t / 0.25) * 0.75 : 1.15 - (t - 0.25) * 0.2;
+      if (e.follow) e.sprite.position.set(e.follow.x, e.follow.y + 1.15 + t * 0.15, e.follow.z);
+      e.sprite.scale.setScalar(0.62 * pop);
+      (e.sprite.material as THREE.SpriteMaterial).opacity = t > 0.8 ? (1 - t) / 0.2 : 1;
+      if (e.life >= e.max) e.sprite.visible = false;
     }
     for (const r of this.rings) {
       if (r.life >= r.max) continue;

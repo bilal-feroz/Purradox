@@ -8,6 +8,8 @@ export interface GameEvents {
   jump: { cat: CatId; x: number; y: number; z: number };
   land: { cat: CatId; x: number; y: number; z: number; impact: number };
   pounceStart: { cat: CatId; dirX: number; dirZ: number; x: number; y: number; z: number };
+  /** An AI cat is winding up a pounce (readable tell for Perfect Hiss). */
+  pounceTell: { cat: CatId; x: number; y: number; z: number };
   pounceHit: { attacker: CatId; target: CatId; gripDamage: boolean; x: number; y: number; z: number };
   hissStart: { cat: CatId; dirX: number; dirZ: number; x: number; y: number; z: number };
   perfectHiss: { hisser: CatId; attacker: CatId; x: number; y: number; z: number };

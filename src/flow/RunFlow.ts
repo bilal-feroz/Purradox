@@ -80,7 +80,7 @@ export function registerRunFlow(g: Game): void {
       g.hud.show(true);
       g.hud.pingObjective(g.time.realTime, 5);
       g.stamps.clear(false);
-      g.stamps.show("STEAL THE FISH", "hunt", true);
+      g.stamps.show("STEAL THE FISH", "hunt", true, "…then carry it to the Safe Rooftop. Every move you make is being recorded.");
       g.audio.play("stamp", { volume: 0.4 });
       g.audio.setMusic("round1");
       g.audio.setTemporalHum(false);

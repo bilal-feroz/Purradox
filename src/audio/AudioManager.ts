@@ -28,7 +28,8 @@ export type SoundName =
   | "stamp"
   | "seagull"
   | "scent"
-  | "whoosh";
+  | "whoosh"
+  | "tell";
 
 interface PlayOpts {
   at?: THREE.Vector3 | { x: number; y: number; z: number };
@@ -160,6 +161,7 @@ export class AudioManager {
     bus.on("jump", (e) => this.play("jump", { at: e, volume: isLocal(e.cat) ? 0.22 : 0.12 }));
     bus.on("land", (e) => this.play("land", { at: e, volume: 0.1 + e.impact * 0.25 }));
     bus.on("pounceStart", (e) => this.play("pounce", { at: e, volume: isLocal(e.cat) ? 0.42 : 0.3 }));
+    bus.on("pounceTell", (e) => this.play("tell", { at: e, volume: 0.42 }));
     bus.on("pounceHit", (e) => this.play("hit", { at: e, volume: e.gripDamage ? 0.7 : 0.55 }));
     bus.on("hissStart", (e) => this.play("hiss", { at: e, volume: 0.5, cat: e.cat }));
     bus.on("perfectHiss", (e) => this.play("perfect", { at: e, volume: 0.7 }));
@@ -285,6 +287,12 @@ export class AudioManager {
         break;
       case "seagull":
         this.gull(out, now);
+        break;
+      case "tell":
+        // rising "here it comes" wind-up, timed to the rival's crouch
+        this.tone(out, now, "square", 1320, 0.05, 0.1);
+        this.sweep(out, now, "triangle", 260, 980, 0.24, 0.32);
+        this.noiseBurst(out, now + 0.02, 0.08, "bandpass", 1400, 1.4, 0.25);
         break;
       case "scent":
         [660, 990, 1320, 1760].forEach((f, i) => this.tone(out, now + i * 0.07, "sine", f, 0.4, 0.18));

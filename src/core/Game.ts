@@ -325,6 +325,12 @@ export class Game {
       }
       if (this.round === 2 && this.controlled && e.cat === this.controlled.id) this.huntStats.interceptAttempts++;
     });
+    this.bus.on("pounceTell", (e) => {
+      const cat = this.cats.find((c) => c.id === e.cat);
+      if (!cat) return;
+      this.effects.exclaim(cat.position);
+      this.effects.ring(new THREE.Vector3(e.x, e.y + 0.04, e.z), 0.9, 0xf7cf55, 0.3);
+    });
     this.bus.on("hissStart", (e) => {
       if (e.cat === "fishcat" && isRunRecording()) {
         this.recorder.event(this.runTime, "hiss", { dirX: e.dirX, dirZ: e.dirZ }, snap);

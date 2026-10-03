@@ -53,12 +53,35 @@ export class CatController {
     if (this.input.peek("hiss", 0.15) && a.canAct && a.abilities.hissReady && a.abilities.pounceState === "idle") {
       this.input.consume("hiss", 0.15);
       const aim = a.forward(new THREE.Vector3());
-      this.assist(a, aim, 5, 1.6);
+      if (!this.faceThreat(a, aim)) this.assist(a, aim, 5, 1.6);
       a.hissAim.copy(aim);
       a.wantHiss = true;
     }
     if (this.input.consume("interact", 0.15)) this.interactPressed = true;
     if (this.input.consume("scent", 0.15)) this.scentPressed = true;
+  }
+
+  /** Point `aim` at the nearest opponent winding up a pounce, from any side. */
+  private faceThreat(a: CatActor, aim: THREE.Vector3): boolean {
+    let best: CatActor | null = null;
+    let bestD = 5.5;
+    for (const t of this.targets) {
+      if (t === a || !t.active || t.team === a.team) continue;
+      const ps = t.abilities.pounceState;
+      if (ps !== "windup" && !(ps === "active" && t.abilities.pounceT < 0.12)) continue;
+      _to.subVectors(t.position, a.position);
+      if (Math.abs(_to.y) > 1.4) continue;
+      const d = Math.hypot(_to.x, _to.z);
+      if (d < bestD) {
+        bestD = d;
+        best = t;
+      }
+    }
+    if (!best) return false;
+    aim.subVectors(best.position, a.position).setY(0);
+    if (aim.lengthSq() < 1e-4) a.forward(aim);
+    aim.normalize();
+    return true;
   }
 
   /** Bend `aim` toward the best opponent inside a cone (soft auto-aim). */

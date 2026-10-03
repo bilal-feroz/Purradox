@@ -4,6 +4,8 @@ import type { CatStats } from "../data/cats";
 export type PounceState = "idle" | "windup" | "active" | "recover";
 
 export const POUNCE_WINDUP = 0.075;
+/** Rivals telegraph their pounce for this long (readable Perfect Hiss tell). */
+export const AI_POUNCE_WINDUP = 0.27;
 export const POUNCE_RECOVER = 0.2;
 export const HISS_WINDOW = 0.5;
 /** Portion of the hiss window that counts as a Perfect Hiss. */
@@ -32,6 +34,11 @@ export class CatAbilities {
   hissRejects = 0;
 
   scentCooldown = 0;
+  /**
+   * Anticipation before the lunge. The player gets an instant pounce; AI
+   * rivals telegraph theirs so a well-timed Hiss can be learned.
+   */
+  windupTime = POUNCE_WINDUP;
   /** Cooldown lengths (seconds) for HUD fill. */
   pounceCooldownMax: number;
   hissCooldownMax: number;
@@ -136,7 +143,7 @@ export class CatAbilities {
     switch (this.pounceState) {
       case "windup":
         this.pounceT += dt;
-        if (this.pounceT >= POUNCE_WINDUP) {
+        if (this.pounceT >= this.windupTime) {
           this.pounceState = "active";
           this.pounceT = 0;
           this.pounceCooldown = this.stats.pounceCooldown;

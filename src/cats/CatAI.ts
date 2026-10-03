@@ -5,6 +5,7 @@ import { Random } from "../core/Random";
 import type { FishSystem } from "../fish/Fish";
 import type { NavNode, WaypointGraph } from "../level/WaypointGraph";
 import type { PhysicsWorld } from "../physics/PhysicsWorld";
+import { AI_POUNCE_WINDUP } from "../player/CatAbilities";
 import type { CatActor } from "./CatActor";
 
 export type AIState =
@@ -336,7 +337,7 @@ export class RivalBrain {
     this.pounceTimer = this.p.pounceCooldown * (w.round === 2 ? 0.8 : 1) + this.rng.range(-0.3, 0.4);
     if (!this.rng.chance(this.p.pounceChance)) return false;
     const travel = distQ / Math.max(1, a.stats.pounceSpeed);
-    w.predict(travel + 0.08, _p);
+    w.predict(travel + AI_POUNCE_WINDUP, _p);
     a.pounceAim.subVectors(_p, a.position).setY(0);
     if (a.pounceAim.lengthSq() < 1e-4) a.pounceAim.copy(a.forward());
     a.pounceAim.normalize();

@@ -168,7 +168,7 @@ export class FishSystem {
 
   private placeOnTable(): void {
     this.detachToScene();
-    this.model.scale.setScalar(0.78);
+    this.model.scale.setScalar(0.95);
     this.model.position.copy(this.tablePos);
     this.model.rotation.set(0, 0.35, 0);
   }
@@ -270,11 +270,16 @@ export class FishSystem {
     switch (this.state) {
       case "table": {
         this.model.position.copy(this.tablePos);
-        this.model.position.y += Math.sin(time * 2.2) * 0.012;
+        this.model.position.y += 0.04 + Math.sin(time * 2.2) * 0.03;
+        this.model.rotation.y = 0.35 + Math.sin(time * 0.9) * 0.25;
+        // golden "steal me" ring on the ice
+        this.beacon.visible = !this.reservedFor;
+        this.beacon.position.set(this.tablePos.x, this.tablePos.y - 0.1, this.tablePos.z);
+        this.beacon.scale.setScalar(1.25 + Math.sin(time * 4) * 0.12);
         this.sparkleTimer -= dt;
         if (this.sparkleTimer <= 0) {
-          this.sparkleTimer = 0.28;
-          this.effects.twinkle(_v.copy(this.tablePos).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.18 + Math.random() * 0.25, (Math.random() - 0.5) * 0.4)));
+          this.sparkleTimer = 0.17;
+          this.effects.twinkle(_v.copy(this.tablePos).add(new THREE.Vector3((Math.random() - 0.5) * 0.7, 0.2 + Math.random() * 0.35, (Math.random() - 0.5) * 0.5)), 0xfff6c9, 0.13);
         }
         this.tryPickups(cats, 1.75, 1.5);
         break;

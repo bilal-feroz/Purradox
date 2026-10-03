@@ -119,7 +119,8 @@ export class CombatSystem {
         this.fish.damageGrip(target, attacker, floor);
       }
       target.stagger(0.3, dir, 3.2);
-      target.invulnT = 0.75;
+      // A short grace window so two rivals can't chain-strip the fish.
+      target.invulnT = target.mode === "replay" ? 0.75 : 1.15;
     } else {
       target.stagger(0.62, dir, 5.6);
       target.invulnT = 0.45;

@@ -155,7 +155,7 @@ export function registerHuntFlow(g: Game): void {
         ...replay.events.filter((e) => e.type === "pounce").map((e) => ({ at: e.t / dur, kind: "pounce" as const })),
       ]);
       g.stamps.clear(false);
-      g.stamps.show(`HUNT PAST YOU`, "hunt", true);
+      g.stamps.show(`HUNT PAST YOU`, "hunt", true, "Past You replays your exact run. Press R to sniff out where it goes next.");
       g.audio.play("stamp", { volume: 0.5 });
       g.audio.setMusic("round2");
       g.audio.setTemporalHum(true);

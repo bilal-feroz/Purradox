@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { CATS, type CatId } from "../data/cats";
 import type { EventBus } from "../core/EventBus";
 import { CatAnimator, type CatAction } from "../player/CatAnimator";
-import { CatAbilities } from "../player/CatAbilities";
+import { AI_POUNCE_WINDUP, CatAbilities, POUNCE_WINDUP } from "../player/CatAbilities";
 import { CatMovement, type MoveIntent, type MoveModifiers } from "../player/CatMovement";
 import type { PhysicsWorld } from "../physics/PhysicsWorld";
 import { buildCat, type CatMaterials, type CatRig } from "./CatModel";
@@ -198,7 +198,10 @@ export class CatActor {
 
     // Requests → abilities
     if (this.wantPounce && this.canAct && !ab.busy) {
-      ab.tryPounce(this.pounceAim);
+      ab.windupTime = this.mode === "ai" ? AI_POUNCE_WINDUP : POUNCE_WINDUP;
+      if (ab.tryPounce(this.pounceAim) && this.mode === "ai") {
+        this.bus.emit("pounceTell", { cat: this.id, x: this.position.x, y: this.position.y, z: this.position.z });
+      }
     }
     if (this.wantHiss && this.canAct && ab.pounceState === "idle") {
       if (ab.tryHiss(this.hissAim)) {
@@ -256,6 +259,7 @@ export class CatActor {
       mods.allowJump = false;
     } else if (ab.hissActive) {
       mods.speedScale *= 0.3;
+      if (ab.hissT < 0.3) mods.face = ab.hissDir;
     } else if (this.hesitateT > 0) {
       mods.speedScale *= 0.45;
       mods.control = 0.6;

@@ -60,7 +60,7 @@ TypeScript · Vite · Three.js (WebGL2) · Rapier 3D (WASM kinematic character c
 ## Demo flow (≈3 minutes)
 
 1. **STEAL THE FISH.** Grab the sparkling fish from the market table.
-2. Mochi gives chase. **Pounce** to knock it over, then time a **Hiss** as it lunges for a **PERFECT HISS!**
+2. Mochi gives chase. **Pounce** to knock it over, then hiss the moment the yellow **!** pops over its head for a **PERFECT HISS!**
 3. Spill the **pigeon feed** in the courtyard: the flock bursts and the rivals get distracted.
 4. Take the **awning shortcut** (crates → coral awning → teal awning → terrace).
 5. Climb the second alley, cross the laundry rooftops and make the final jump to the **Safe Rooftop**.

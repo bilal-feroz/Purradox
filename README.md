@@ -28,7 +28,7 @@ Fish Cat replaying your exact run, with the same route, jumps, pounces and hisse
 | **Shift** | Sprint (no stamina) |
 | **Space** | Jump (coyote time + jump buffering; hold for higher) |
 | **Left mouse** | Pounce: a lunge that knocks rivals over or loosens the carrier's Fish Grip |
-| **Right mouse / Q** | Hiss: a frontal cone. A pounce that hits you mid-hiss is a **Perfect Hiss** and the attacker bounces off |
+| **Right mouse / Q** | Hiss: a frontal cone (you snap to face a rival that is winding up). Rivals flash a yellow **!** just before they lunge; a pounce that hits you mid-hiss is a **Perfect Hiss** and the attacker bounces off |
 | **E** | Interact (trash can, pigeon feed, fish scraps, bottle, laundry) |
 | **R** | Scent Memory (Round 2 only): reveals the next 2–3 s of Past You's path as sea-glass paw prints |
 | **Esc** | Pause / release the mouse |

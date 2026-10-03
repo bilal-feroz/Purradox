@@ -33,6 +33,8 @@ export interface MoveModifiers {
   forced: THREE.Vector3 | null;
   /** Steering authority while forced (pounce air steer). */
   forcedSteer: number;
+  /** Turn to face this direction regardless of movement (hiss). */
+  face?: THREE.Vector3 | null;
 }
 
 interface Arc {
@@ -296,7 +298,11 @@ export class CatMovement {
     // -------------------------------------------------- facing
     const hs = Math.hypot(this.horiz.x, this.horiz.z);
     const prevYaw = this.yaw;
-    if (mods.forced && hs > 0.5) {
+    if (mods.face) {
+      let d = Math.atan2(mods.face.x, mods.face.z) - this.yaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      this.yaw += clamp(d, -26 * dt, 26 * dt);
+    } else if (mods.forced && hs > 0.5) {
       this.yaw = Math.atan2(this.horiz.x, this.horiz.z);
     } else if (this.target.lengthSq() > 0.04 && hs > 0.3) {
       const want = Math.atan2(this.horiz.x, this.horiz.z);
