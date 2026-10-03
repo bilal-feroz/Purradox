@@ -43,7 +43,10 @@ export class GoalBeacon {
     uCam: { value: new THREE.Vector3() },
   };
 
-  constructor(scene: THREE.Scene, at: THREE.Vector3) {
+  private readonly baseColor: number;
+
+  constructor(scene: THREE.Scene, at: THREE.Vector3, opts: { color?: number; height?: number; rTop?: number; rBottom?: number } = {}) {
+    this.baseColor = opts.color ?? 0xffd98a;
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: VERT,
@@ -54,8 +57,9 @@ export class GoalBeacon {
       blending: THREE.AdditiveBlending,
       toneMapped: false,
     });
-    const geo = new THREE.CylinderGeometry(1.0, 1.7, 26, 14, 1, true);
-    geo.translate(0, 13, 0);
+    const height = opts.height ?? 26;
+    const geo = new THREE.CylinderGeometry(opts.rTop ?? 1.0, opts.rBottom ?? 1.7, height, 14, 1, true);
+    geo.translate(0, height / 2, 0);
     const shaft = new THREE.Mesh(geo, mat);
     shaft.frustumCulled = false;
     shaft.renderOrder = 4;
@@ -64,11 +68,15 @@ export class GoalBeacon {
     scene.add(this.group);
   }
 
-  update(time: number, camPos: THREE.Vector3, visible: boolean, temporal: boolean): void {
+  update(time: number, camPos: THREE.Vector3, visible: boolean, temporal: boolean, urgent = false): void {
     this.group.visible = visible;
     this.uniforms.uTime.value = time;
     this.uniforms.uCam.value.copy(camPos);
-    this.uniforms.uColor.value.setHex(temporal ? 0x9ff5e4 : 0xffd98a);
-    this.uniforms.uStrength.value = 0.42 + Math.sin(time * 1.7) * 0.06;
+    this.uniforms.uColor.value.setHex(temporal ? 0x9ff5e4 : this.baseColor);
+    this.uniforms.uStrength.value = urgent ? 0.6 + Math.sin(time * 7) * 0.18 : 0.42 + Math.sin(time * 1.7) * 0.06;
+  }
+
+  setPosition(p: THREE.Vector3): void {
+    this.group.position.copy(p);
   }
 }

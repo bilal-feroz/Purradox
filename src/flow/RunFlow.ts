@@ -35,6 +35,8 @@ export function registerRunFlow(g: Game): void {
   let t = 0;
   let sway = 0;
   let stampStage = 0;
+  /** Seconds since a rival escaped with the fish (-1 = run still on). */
+  let lostT = -1;
 
   // ---------------------------------------------------------------- MENU
   g.fsm.register(GameState.MENU, {
@@ -221,12 +223,36 @@ export function registerRunFlow(g: Game): void {
       g.input.requestPointerLock();
       g.recorder.tick(0, () => g.snapshotRunner(), true);
       g.history.tick(0, true);
+      lostT = -1;
     },
     update: (realDt) => {
+      if (lostT >= 0) {
+        // FISH LOST: short beat, then straight back into a fresh Round 1.
+        lostT += realDt;
+        const thief = g.fish.owner;
+        if (thief && lostT > 0.35) thief.rig.root.visible = false;
+        g.updateFollowCamera(realDt);
+        const skip = lostT > 0.7 && (g.input.consume("jump", 0.2) || g.input.consume("pounce", 0.2) || g.input.consume("interact", 0.2));
+        if (lostT > 2.2 || skip) g.fsm.transition(GameState.INTRO);
+        return;
+      }
       const dt = g.time.simDt;
       if (dt > 0) {
         g.runTime += dt;
         g.simulate(dt, 1);
+        const thief = g.fish.owner;
+        if (thief && thief !== g.runner && g.brains[thief.id].escaped) {
+          lostT = 0;
+          const where = g.brains[thief.id].escapePoint?.label ?? "the rooftops";
+          g.hud.setPrompt(null);
+          g.stamps.clear(false);
+          g.stamps.show("FISH LOST!", "watching", false, `${thief.def.name} slipped away through ${where}. Again!`);
+          g.audio.play("fail", { volume: 0.5 });
+          g.effects.sparkle(thief.center(), 18, 0xfff3b0, 2.2, 0.8);
+          g.effects.dust(thief.position, 10, 0.9, 0.8, 0.16);
+          g.time.slowMo(0.5, 0.35);
+          return;
+        }
         g.recorder.tick(g.runTime, () => g.snapshotRunner());
         g.history.tick(g.runTime);
         const a = g.runner;

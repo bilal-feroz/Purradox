@@ -90,6 +90,20 @@ export const INTERACTABLES = {
 
 export const FOUNTAIN = { center: [15, 2.2, -21] as V3, radius: 3.3 };
 
+/**
+ * Round 1: where a rival that steals the fish tries to vanish. Each sits on
+ * a nav node at the edge of a zone; the thief must catch it before it gets
+ * there or Round 1 is lost.
+ */
+export const ESCAPE_POINTS: Array<{ id: string; label: string; pos: V3 }> = [
+  { id: "market_gate", label: "the market gate", pos: [-24, 0, 20.5] },
+  { id: "side_passage", label: "the side passage", pos: [5, 1.0, 9.5] },
+  { id: "court_gap", label: "the courtyard gap", pos: [30, 2.2, -15] },
+  { id: "alley_end", label: "the alley drainpipe", pos: [-2.6, 3.6, -62] },
+  { id: "roof_hatch", label: "the roof hatch", pos: [26, 5.0, -40] },
+  { id: "far_roof", label: "the far roof edge", pos: [41.5, 5.0, -58] },
+];
+
 /** Round 1 ambush spots for the ambusher archetype (in route order). */
 export const AMBUSH_SPOTS: V3[] = [
   [2.5, 2.2, -33.5],

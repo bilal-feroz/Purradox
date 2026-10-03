@@ -99,6 +99,8 @@ export class Game {
   sky!: Sky;
   water!: Water;
   beacon!: GoalBeacon;
+  /** Round 1: red shaft over the spot a fish thief is running for. */
+  escapeBeacon!: GoalBeacon;
   fish!: FishSystem;
   combat!: CombatSystem;
   interactables!: Interactables;
@@ -153,6 +155,7 @@ export class Game {
   private gripCalmT = 0;
   private lastPlayerGrip = MAX_GRIP;
   private dustTimer = 0;
+  private escapePulse = 0;
   private scentT = 99;
   readonly tmp = new THREE.Vector3();
   private readonly trackPos = new THREE.Vector3();
@@ -230,6 +233,7 @@ export class Game {
     const level = buildSardineStreet(this.scene, this.physics, this.materials);
     this.water = new Water(this.scene, H.sea, level.shoreDistance);
     this.beacon = new GoalBeacon(this.scene, new THREE.Vector3(SPAWN.goal[0], SPAWN.goal[1] + 0.05, SPAWN.goal[2] - 1.2));
+    this.escapeBeacon = new GoalBeacon(this.scene, new THREE.Vector3(), { color: 0xff6a4a, height: 10, rTop: 0.45, rBottom: 0.9 });
     progress(0.6, "Herding cats…");
     await nextFrame();
     this.createActors();
@@ -725,6 +729,15 @@ export class Game {
     this.bus.emit("scentMemory", { duration: 2.6 });
   }
 
+  /** Round 1: the rival currently running off with the fish (if any). */
+  escapingThief(): { cat: CatActor; escape: { label: string; pos: [number, number, number] } } | null {
+    if (this.round !== 1 || !this.fsm.is(GameState.FISH_RUN)) return null;
+    const owner = this.fish.owner;
+    if (!owner || owner === this.runner || owner.mode !== "ai") return null;
+    const e = this.brains[owner.id].escapePoint;
+    return e ? { cat: owner, escape: e } : null;
+  }
+
   /** Update HUD widgets from the current gameplay state. */
   updateHUD(): void {
     const ctl = this.controlled;
@@ -750,6 +763,10 @@ export class Game {
         const d = Math.round(runner.position.distanceTo(goal));
         const still = Math.hypot(runner.velocity.x, runner.velocity.z) < 0.5;
         this.hud.setObjective("SAFE ROOFTOP", `${d}m`, this.hud.objectiveWanted(now) || still, false, "bowl");
+      } else if (this.fish.owner && this.fish.owner !== runner) {
+        // a rival is running for its escape point: stop it!
+        const d = Math.round(runner.position.distanceTo(this.fish.owner.position));
+        this.hud.setObjective(`STOP ${this.fish.owner.def.name.toUpperCase()}!`, `${d}m`, true, true, "fish");
       } else {
         const d = Math.round(runner.position.distanceTo(this.fish.position));
         this.hud.setObjective("RECOVER THE FISH", `${d}m`, true, true, "fish");
@@ -844,6 +861,17 @@ export class Game {
     this.water.update(this.time.realTime);
     this.sky.update(this.time.realDt);
     this.beacon.update(this.time.realTime, this.camera.camera.position, this.fsm.is(GameState.INTRO, GameState.FISH_RUN, GameState.HUNT), this.round === 2);
+    const thief = this.escapingThief();
+    if (thief) {
+      this.escapeBeacon.setPosition(this.tmp.set(...thief.escape.pos));
+      // pulsing red rings on the floor where the thief means to vanish
+      this.escapePulse -= this.time.realDt;
+      if (this.escapePulse <= 0) {
+        this.escapePulse = 0.55;
+        this.effects.ring(this.tmp.set(thief.escape.pos[0], thief.escape.pos[1] + 0.05, thief.escape.pos[2]), 1.7, 0xff6a4a, 0.5);
+      }
+    }
+    this.escapeBeacon.update(this.time.realTime, this.camera.camera.position, thief !== null, false, true);
     this.effects.update(this.fsm.is(GameState.REWIND) ? this.time.realDt : dt, this.camera.camera);
     this.prints.update(dt, this.time.realTime);
     this.lighting.setFocus(this.controlled ? this.controlled.position : this.camera.pivot);

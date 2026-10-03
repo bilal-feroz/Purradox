@@ -214,7 +214,11 @@ export class FishSystem {
       if (attacker) away.subVectors(target.position, attacker.position).setY(0);
       if (away.lengthSq() < 1e-4) away.set(Math.sin(target.yaw), 0, Math.cos(target.yaw));
       away.normalize();
-      this.drop(target, attacker, away);
+      // Knocked up and mostly sideways: it lands between the two cats, so
+      // whoever reacts first (usually the attacker) gets it.
+      const side = (Math.floor(this.position.x * 7 + this.position.z * 13) & 1) === 0 ? 1 : -1;
+      const dir = new THREE.Vector3(-away.z * side, 0, away.x * side).multiplyScalar(0.85).addScaledVector(away, 0.2).normalize();
+      this.drop(target, attacker, dir);
       return true;
     }
     return false;
@@ -228,11 +232,12 @@ export class FishSystem {
     this.model.getWorldPosition(this.position);
     this.detachToScene();
     this.model.scale.setScalar(0.78);
-    // Fly sideways + back from the carrier's travel, so the attacker gets a fair grab.
-    this.velocity.set(dir.x * 3.4 + from.velocity.x * 0.25, 6.4, dir.z * 3.4 + from.velocity.z * 0.25);
+    // Pop up and a little sideways, so the attacker gets a fair grab.
+    this.velocity.set(dir.x * 2.4 + from.velocity.x * 0.2, 6.4, dir.z * 2.4 + from.velocity.z * 0.2);
     this.spin.set(9, 4, 12);
     this.bounces = 0;
-    this.lockouts.set(from, 1.1);
+    // the cat that just lost it can't snatch it straight back
+    this.lockouts.set(from, 1.8);
     this.effects.sparkle(this.position, 22, 0xfff3b0, 3.4, 0.8);
     this.bus.emit("fishDrop", { cat: from.id, by: by ? by.id : null, x: this.position.x, y: this.position.y, z: this.position.z });
     this.onDrop?.(from, by);

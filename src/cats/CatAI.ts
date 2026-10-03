@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { CATS, type Archetype, type CatId } from "../data/cats";
-import { AMBUSH_SPOTS, SPAWN, type V3 } from "../data/level";
+import { AMBUSH_SPOTS, ESCAPE_POINTS, SPAWN, type V3 } from "../data/level";
 import { Random } from "../core/Random";
 import type { FishSystem } from "../fish/Fish";
 import type { NavNode, WaypointGraph } from "../level/WaypointGraph";
@@ -90,6 +90,8 @@ export class RivalBrain {
   private path: NavNode[] = [];
   private pathIdx = 0;
   private repathT = 0;
+  /** Where the current path leads (repath only when this moves). */
+  private readonly pathTarget = new THREE.Vector3(1e9, 0, 0);
   private stuckT = 0;
   private readonly lastProgress = new THREE.Vector3();
   private readonly home: THREE.Vector3;
@@ -105,7 +107,11 @@ export class RivalBrain {
   readonly missions: Mission[] = [];
   private missionIdx = 0;
   private missionDone = false;
-  private escapeGoal: NavNode | null = null;
+  /** Round 1: the escape point this cat is running for with the fish. */
+  escapePoint: (typeof ESCAPE_POINTS)[number] | null = null;
+  /** Set when this cat reached its escape point while holding the fish. */
+  escaped = false;
+  private readonly escapePos = new THREE.Vector3();
   readonly p: Personality;
   /** Debug: current navigation target. */
   readonly goal = new THREE.Vector3();
@@ -142,7 +148,8 @@ export class RivalBrain {
     this.missions.length = 0;
     this.missionIdx = 0;
     this.missionDone = false;
-    this.escapeGoal = null;
+    this.escapePoint = null;
+    this.escaped = false;
     this.sawPickup = false;
     this.helper = false;
     this.enabled = true;
@@ -433,31 +440,52 @@ export class RivalBrain {
     const a = this.actor;
     const q = w.quarry;
     if (w.fish.owner !== a) {
+      this.escapePoint = null;
       this.go("CHASE");
       return;
     }
     a.lookTarget = null;
-    if (!this.escapeGoal || this.stateT > 3 || Math.hypot(this.escapeGoal.x - a.position.x, this.escapeGoal.z - a.position.z) < 1.2) {
+    // Pick an authored escape point away from the thief; switch only if the
+    // thief cuts the current one off (gets clearly closer to it than us).
+    const cutOff =
+      this.escapePoint &&
+      Math.hypot(this.escapePos.x - q.position.x, this.escapePos.z - q.position.z) < Math.hypot(this.escapePos.x - a.position.x, this.escapePos.z - a.position.z) - 3;
+    if (!this.escapePoint || (cutOff && this.stateT > 1.5)) {
       this.stateT = 0;
-      // farthest node from the player within reach
-      let best: NavNode | null = null;
-      let bestScore = -Infinity;
-      for (const n of w.graph.nodes.values()) {
-        const dSelf = Math.hypot(n.x - a.position.x, n.z - a.position.z);
-        if (dSelf > 16 || Math.abs(n.y - a.position.y) > 2) continue;
-        const score = Math.hypot(n.x - q.position.x, n.z - q.position.z) - dSelf * 0.3;
-        if (score > bestScore) {
-          bestScore = score;
-          best = n;
-        }
+      this.escapePoint = this.pickEscape(w);
+      this.escapePos.set(...this.escapePoint.pos);
+    }
+    const d = this.moveTo(this.escapePos, dt, w, true);
+    // a cat with a mouthful of fish is clearly slower than the thief, so a
+    // quick chase (and one pounce) always gets it back
+    a.speedScale *= 0.82;
+    if (d < 1.1 && Math.abs(this.escapePos.y - a.position.y) < 1) this.escaped = true;
+  }
+
+  private pickEscape(w: AIWorld): (typeof ESCAPE_POINTS)[number] {
+    const a = this.actor;
+    const q = w.quarry;
+    let best = ESCAPE_POINTS[0];
+    let bestScore = -Infinity;
+    for (const e of ESCAPE_POINTS) {
+      const [x, y, z] = e.pos;
+      const dSelf = Math.hypot(x - a.position.x, z - a.position.z) + Math.abs(y - a.position.y) * 3;
+      const dQuarry = Math.hypot(x - q.position.x, z - q.position.z);
+      // far enough that the chase is fair, close enough to be a real threat
+      let score = dQuarry - dSelf * 0.6;
+      if (dSelf < 18) score -= 40;
+      if (dSelf > 45) score -= 25;
+      // don't run straight past the thief
+      _v.set(x - a.position.x, 0, z - a.position.z).normalize();
+      _w.set(q.position.x - a.position.x, 0, q.position.z - a.position.z);
+      const dq = _w.length();
+      if (dq > 0.01 && _v.dot(_w.divideScalar(dq)) > 0.6 && dq < dSelf) score -= 30;
+      if (score > bestScore) {
+        bestScore = score;
+        best = e;
       }
-      this.escapeGoal = best;
     }
-    if (this.escapeGoal) {
-      _v.set(this.escapeGoal.x, this.escapeGoal.y, this.escapeGoal.z);
-      this.moveTo(_v, dt, w, false);
-      a.speedScale *= 0.94;
-    }
+    return best;
   }
 
   private updateMission(dt: number, w: AIWorld, distQ: number): void {
@@ -529,10 +557,12 @@ export class RivalBrain {
       return dist;
     }
     this.repathT -= dt;
-    if (this.path.length === 0 || this.repathT <= 0) {
+    const targetMoved = this.pathTarget.distanceToSquared(target) > 2.25;
+    if (this.path.length === 0 || (this.repathT <= 0 && targetMoved)) {
       this.repathT = 0.7;
-      const from = w.graph.nearest(a.position.x, a.position.y, a.position.z);
+      this.pathTarget.copy(target);
       const to = w.graph.nearest(target.x, target.y, target.z);
+      const from = this.bestStart(w, to);
       this.path = w.graph.path(from, to);
       this.pathIdx = 0;
       // skip the first node if we're already past it toward the second
@@ -579,6 +609,30 @@ export class RivalBrain {
     return dist;
   }
 
+  /**
+   * Start node for a new path: of the reachable nodes nearby, the one with
+   * the shortest total route (not merely the nearest, which can sit behind
+   * the cat and make it double back and forth between two nodes).
+   */
+  private bestStart(w: AIWorld, to: NavNode): NavNode {
+    const a = this.actor;
+    const nearest = w.graph.nearest(a.position.x, a.position.y, a.position.z);
+    let best = nearest;
+    let bestCost = Infinity;
+    _knee.copy(a.position).setY(a.position.y + 0.4);
+    for (const n of w.graph.nodes.values()) {
+      const d = Math.hypot(n.x - a.position.x, n.z - a.position.z);
+      if (d > 9 || Math.abs(n.y - a.position.y) > 1.0) continue;
+      if (n !== nearest && !w.physics.lineOfSight(_knee, _w.set(n.x, n.y + 0.4, n.z))) continue;
+      const cost = d + w.graph.pathLength(w.graph.path(n, to));
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = n;
+      }
+    }
+    return best;
+  }
+
   private checkStuck(dt: number, node: NavNode | null): void {
     const a = this.actor;
     if (Math.hypot(a.intent.moveX, a.intent.moveZ) < 0.1) {
@@ -600,6 +654,7 @@ export class RivalBrain {
       } else {
         a.intent.jump = true;
         this.path = [];
+        this.pathTarget.set(1e9, 0, 0);
       }
     }
   }
