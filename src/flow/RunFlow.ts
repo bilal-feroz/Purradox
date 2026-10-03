@@ -153,6 +153,9 @@ export function registerRunFlow(g: Game): void {
     enter: () => {
       g.replay = g.recorder.finish(g.runTime, () => g.snapshotFishCat(), true);
       g.history.tick(g.runTime, true);
+      // Ask the Tactical Director now, while the end-of-run beats play.
+      g.plan = null;
+      g.planRequest = g.director.analyze(g.telemetry.summary());
       g.fishCat.setForcedAction("victory");
       g.fishCat.meow();
       g.audio.play("victory", { volume: 0.55 });

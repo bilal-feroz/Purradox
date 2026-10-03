@@ -1,0 +1,16 @@
+{
+  "name": "purradox-director-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Optional server-side Alley Council (Tactical Director) for PURRADOX, powered by Claude. The game never depends on it.",
+  "type": "module",
+  "scripts": {
+    "start": "node director.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0"
+  }
+}

@@ -34,8 +34,8 @@ export function registerTransitionFlow(g: Game): void {
       t = 0;
       planShown = false;
       resolved = null;
-      const summary = g.telemetry.summary();
-      pending = g.director.analyze(summary);
+      // The request was started when the run ended; reuse it.
+      pending = g.planRequest ?? g.director.analyze(g.telemetry.summary());
       pending.then((p) => {
         resolved = p;
       });

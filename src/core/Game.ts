@@ -121,6 +121,8 @@ export class Game {
   controlled: CatActor | null = null;
   replay: ReplayData | null = null;
   plan: TacticalPlan | null = null;
+  /** In-flight Tactical Director request (started when the run ends). */
+  planRequest: Promise<TacticalPlan> | null = null;
   hunterId: RivalId | null = null;
   runTime = 0;
   huntTime = 0;
@@ -157,8 +159,9 @@ export class Game {
     this.scene.background = new THREE.Color(PALETTE.skyHorizon);
 
     const params = new URLSearchParams(location.search);
-    const directorUrl = params.get("director");
-    this.director = new TacticalDirector(directorUrl ? new HttpStrategyProvider(directorUrl) : import.meta.env.VITE_DIRECTOR_URL ? new HttpStrategyProvider(import.meta.env.VITE_DIRECTOR_URL as string) : null);
+    const directorUrl = params.get("director") ?? (import.meta.env.VITE_DIRECTOR_URL as string | undefined) ?? null;
+    // The optional LLM council gets the whole end-of-run beat (~6 s) to answer.
+    this.director = new TacticalDirector(directorUrl ? new HttpStrategyProvider(directorUrl) : null, 6000);
 
     this.hud = new HUD(uiRoot);
     this.start = new StartScreen(uiRoot, this.settings);
