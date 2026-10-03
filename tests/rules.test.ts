@@ -65,6 +65,27 @@ describe("Game state machine", () => {
     expect(fsm.state).toBe(GameState.MENU);
   });
 
+  it("a lost fish is a real defeat: try again or go to the menu", () => {
+    const fsm = new StateMachine();
+    fsm.transition(GameState.MENU);
+    fsm.transition(GameState.INTRO);
+    fsm.transition(GameState.FISH_RUN);
+    fsm.transition(GameState.FISH_LOST);
+    expect(() => fsm.transition(GameState.FISH_RUN_COMPLETE)).toThrow();
+    fsm.transition(GameState.INTRO); // TRY AGAIN
+    fsm.transition(GameState.FISH_RUN);
+    fsm.transition(GameState.FISH_LOST);
+    fsm.transition(GameState.MENU); // MAIN MENU
+    expect(fsm.state).toBe(GameState.MENU);
+  });
+
+  it("Esc → MAIN MENU works from every screen past the menu", () => {
+    for (const st of Object.values(GameState)) {
+      if (st === GameState.BOOT || st === GameState.MENU) continue;
+      expect(TRANSITIONS[st], st).toContain(GameState.MENU);
+    }
+  });
+
   it("rejects illegal transitions", () => {
     const fsm = new StateMachine();
     expect(() => fsm.transition(GameState.HUNT)).toThrow();

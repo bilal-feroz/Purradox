@@ -5,6 +5,7 @@ import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
 import { zoneAt } from "../level/Zones";
 import { recordEscape } from "../ui/records";
+import { formatClock } from "../core/math";
 import { ReplayRecorder } from "../replay/ReplayRecorder";
 import { deriveTags, fingerprint } from "../ai/BehaviorProfiler";
 import { loadMemory, memoryEntry, recallHabit, remember, saveMemory } from "../ai/AlleyMemory";
@@ -29,44 +30,6 @@ const THIEF_SPOTS: Array<[number, number, number]> = [
 ];
 const THIEF_CAM = new THREE.Vector3(-15.6, 1.0, 15.3);
 const THIEF_LOOK = new THREE.Vector3(-15.6, 0.62, 11.0);
-/**
- * The opening (first Round 1 of a session): the camera sweeps from the Safe
- * Rooftop back across the laundry roofs, the Pigeon Courtyard and the alley
- * to the Fish Market, and lands behind the thief looking at the fish.
- */
-const OPENING_PATH = new THREE.CatmullRomCurve3(
-  [
-    new THREE.Vector3(66, 15, -88),
-    new THREE.Vector3(44, 16, -64),
-    new THREE.Vector3(28, 12, -42),
-    new THREE.Vector3(20, 10, -26),
-    new THREE.Vector3(-2, 19, -2),
-    new THREE.Vector3(-12, 13, 7),
-    new THREE.Vector3(-18, 5, 13),
-    new THREE.Vector3(-24.4, 1.45, 16.9),
-  ],
-  false,
-  "centripetal",
-);
-const OPENING_LOOK = new THREE.CatmullRomCurve3(
-  [
-    new THREE.Vector3(56, 7, -74),
-    new THREE.Vector3(32, 5, -50),
-    new THREE.Vector3(18, 2.5, -24),
-    new THREE.Vector3(22, 1.5, 6),
-    new THREE.Vector3(-14, 1, 14),
-    new THREE.Vector3(-20, 1, 15),
-    new THREE.Vector3(-21.95, 1.1, 15.6),
-    new THREE.Vector3(-21.95, 0.98, 15.6),
-  ],
-  false,
-  "centripetal",
-);
-/** The sweep ends on a close-up of the fish, held for FRAME seconds. */
-const SWEEP = 3.8;
-const FRAME = 0.8;
-const smooth = (x: number) => x * x * (3 - 2 * x);
-
 const WATCH_SPOTS: Array<[number, number, number]> = [
   [50.6, 5.9, -61.2],
   [52.6, 5.9, -62.2],
@@ -78,40 +41,22 @@ export function registerRunFlow(g: Game): void {
   let t = 0;
   let sway = 0;
   let stampStage = 0;
-  /** Seconds since a rival escaped with the fish (-1 = run still on). */
-  let lostT = -1;
-  // opening sweep state
-  let opening = false;
-  let openingSeen = false;
-  let openingEnd = 0;
-  let skipOpening = false;
-  let beat = 0;
-  let watcher: ReturnType<Game["others"]>[number] | null = null;
-  const onSkip = (e: Event) => {
-    if (e instanceof KeyboardEvent && (e.repeat || e.code === "Escape")) return;
-    skipOpening = true;
-  };
-  const skipHint = document.createElement("div");
-  skipHint.className = "opening-skip";
-  skipHint.textContent = "CLICK OR PRESS ANY KEY TO SKIP";
-  document.getElementById("ui-root")?.appendChild(skipHint);
-  /** Show "STEAL THE FISH" (once per intro). */
-  let stampShown = false;
-  const showStamp = () => {
-    if (stampShown) return;
-    stampShown = true;
-    g.hud.show(true);
-    g.hud.pingObjective(g.time.realTime, 5);
-    g.stamps.clear(false);
-    g.stamps.show("STEAL THE FISH", "hunt", true, "…then carry it to the Safe Rooftop. Every move you make is being recorded.");
-    g.audio.play("stamp", { volume: 0.4 });
-  };
+  // FISH_LOST: who got away, and whether the defeat card is up
+  let lostBy: ReturnType<Game["others"]>[number] | null = null;
+  let lostWhere = "";
+  let lostCard = false;
 
   // ---------------------------------------------------------------- MENU
   g.fsm.register(GameState.MENU, {
     enter: () => {
       // The home screen always stars Fish Cat; the thief is chosen later.
       g.runnerId = "fishcat";
+      // quitting mid-cutscene: undo freezes, slow motion and Past You
+      g.time.baseScale = 1;
+      g.time.clearEffects();
+      g.echo.stop();
+      g.councilMap.hide();
+      g.pops.clear();
       g.resetWorld();
       g.round = 1;
       g.controlled = null;
@@ -227,7 +172,7 @@ export function registerRunFlow(g: Game): void {
 
   // ---------------------------------------------------------------- INTRO
   g.fsm.register(GameState.INTRO, {
-    enter: (from) => {
+    enter: () => {
       g.setPaused(false);
       g.results.show(null);
       g.resetWorld();
@@ -240,23 +185,11 @@ export function registerRunFlow(g: Game): void {
       g.runner.mode = "player";
       g.hud.setRound(1);
       g.hud.clearAlerts();
-      // The first run of a session opens with a short, skippable sweep of
-      // Sardine Street; retries and later runs go straight to the fish.
-      opening = !openingSeen && (from === GameState.MENU || from === GameState.THIEF_SELECTION);
-      openingSeen ||= opening;
-      openingEnd = opening ? SWEEP + FRAME : 0;
-      skipOpening = false;
-      beat = 0;
-      stampShown = false;
-      if (opening) {
-        g.hud.show(false);
-        g.stamps.clear(false);
-        skipHint.classList.add("show");
-        window.addEventListener("keydown", onSkip);
-        window.addEventListener("pointerdown", onSkip);
-      } else {
-        showStamp();
-      }
+      g.hud.show(true);
+      g.hud.pingObjective(g.time.realTime, 5);
+      g.stamps.clear(false);
+      g.stamps.show("STEAL THE FISH", "hunt", true, "…then carry it to the Safe Rooftop. Every move you make is being recorded.");
+      g.audio.play("stamp", { volume: 0.4 });
       g.audio.setMusic("round1");
       g.audio.setTemporalHum(false);
       g.renderer.temporalUniforms.uEdge.value = 0;
@@ -265,79 +198,26 @@ export function registerRunFlow(g: Game): void {
       g.lighting.temporalBlend = 0;
       g.temporalVignette.classList.remove("show");
       const p = g.runner.position;
-      if (opening) g.camera.setCinematic(OPENING_PATH.getPoint(0), OPENING_LOOK.getPoint(0), 3, true);
-      else g.camera.setCinematic(new THREE.Vector3(p.x - 6, p.y + 6, p.z + 7), new THREE.Vector3(p.x + 4, p.y, p.z), 2, true);
+      g.camera.setCinematic(new THREE.Vector3(p.x - 6, p.y + 6, p.z + 7), new THREE.Vector3(p.x + 4, p.y, p.z), 2, true);
       g.huntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, echoPerfectHisses: 0 };
       t = 0;
     },
     update: (dt) => {
       t += dt;
-      const moved = g.input.isHeld("forward") || g.input.isHeld("back") || g.input.isHeld("left") || g.input.isHeld("right");
-      if (g.skipOpening) {
-        g.skipOpening = false;
-        skipOpening = true;
-      }
-      if (opening && t < openingEnd && (skipOpening || moved)) {
-        // skip: straight to the thief, the fish and control (the rival
-        // still spots the thief a beat later)
-        t = openingEnd;
-        beat = Math.max(beat, 2);
-        skipHint.classList.remove("show");
-        showStamp();
-      }
       const p = g.runner.position;
       const yaw = g.runner.yaw;
-      if (opening && t < SWEEP) {
-        const u = smooth(Math.min(1, t / SWEEP));
-        // same parameter on both curves: each camera point looks at its landmark
-        g.camera.setCinematic(OPENING_PATH.getPoint(u), OPENING_LOOK.getPoint(u), 3, true);
-      } else if (opening && t < openingEnd) {
-        // hold on the fish with a slow push-in (a rival waits in the background)
-        const end = OPENING_PATH.getPoint(1);
-        const fishAt = OPENING_LOOK.getPoint(1);
-        g.camera.setCinematic(end.clone().lerp(fishAt, 0.3), fishAt, 1.2);
-      } else {
-        const behind = new THREE.Vector3(p.x - Math.sin(yaw) * 4.4, p.y + 1.7, p.z - Math.cos(yaw) * 4.4);
-        g.camera.setCinematic(behind, new THREE.Vector3(p.x + Math.sin(yaw) * 2, p.y + 0.8, p.z + Math.cos(yaw) * 2), opening && t < openingEnd ? 1.6 : 3.2);
-      }
-      if (opening) {
-        // the thief notices the fish; a rival notices the thief
-        const fish = new THREE.Vector3(SPAWN.heroFish[0], SPAWN.heroFish[1] + 0.25, SPAWN.heroFish[2]);
-        watcher ??= g.others().find((c) => c.def.archetype === "sprinter") ?? g.others()[0];
-        if (beat === 0 && t > SWEEP - 0.4) {
-          beat = 1;
-          g.runner.lookTarget = fish;
-        }
-        if (beat === 1 && t > SWEEP + 0.1) {
-          beat = 2;
-          g.runner.meow();
-          skipHint.classList.remove("show");
-          showStamp();
-        }
-        // once the camera is back behind the thief, the rival ahead spots them
-        if (beat === 2 && t > openingEnd + 0.5) {
-          beat = 3;
-          watcher.lookTarget = g.runner.center(new THREE.Vector3());
-          watcher.meow(true);
-        }
-      }
+      const behind = new THREE.Vector3(p.x - Math.sin(yaw) * 4.4, p.y + 1.7, p.z - Math.cos(yaw) * 4.4);
+      g.camera.setCinematic(behind, new THREE.Vector3(p.x + Math.sin(yaw) * 2, p.y + 0.8, p.z + Math.cos(yaw) * 2), 3.2);
       g.camera.update(dt, null, null);
       for (const c of g.cats) c.updateScripted(dt);
       g.fish.update(dt, [], g.time.simTime);
       g.pigeons.update(dt, []);
       g.updateHUD();
-      if (t > openingEnd + (opening ? 1.1 : 1.5) || (t > openingEnd + 0.45 && moved)) g.fsm.transition(GameState.FISH_RUN);
+      const moved = g.input.isHeld("forward") || g.input.isHeld("back") || g.input.isHeld("left") || g.input.isHeld("right");
+      if (t > 1.5 || (t > 0.45 && moved)) g.fsm.transition(GameState.FISH_RUN);
     },
     exit: () => {
       g.stamps.clear();
-      skipHint.classList.remove("show");
-      window.removeEventListener("keydown", onSkip);
-      window.removeEventListener("pointerdown", onSkip);
-      if (opening) {
-        g.runner.lookTarget = null;
-        if (watcher) watcher.lookTarget = null;
-      }
-      watcher = null;
     },
   });
 
@@ -357,34 +237,18 @@ export function registerRunFlow(g: Game): void {
       g.input.requestPointerLock();
       g.recorder.tick(0, () => g.snapshotRunner(), true);
       g.history.tick(0, true);
-      lostT = -1;
     },
     update: (realDt) => {
-      if (lostT >= 0) {
-        // FISH LOST: short beat, then straight back into a fresh Round 1.
-        lostT += realDt;
-        const thief = g.fish.owner;
-        if (thief && lostT > 0.35) thief.rig.root.visible = false;
-        g.updateFollowCamera(realDt);
-        const skip = lostT > 0.7 && (g.input.consume("jump", 0.2) || g.input.consume("pounce", 0.2) || g.input.consume("interact", 0.2));
-        if (lostT > 2.2 || skip) g.fsm.transition(GameState.INTRO);
-        return;
-      }
       const dt = g.time.simDt;
       if (dt > 0) {
         g.runTime += dt;
         g.simulate(dt, 1);
         const thief = g.fish.owner;
         if (thief && thief !== g.runner && g.brains[thief.id].escaped) {
-          lostT = 0;
-          const where = g.brains[thief.id].escapePoint?.label ?? "the rooftops";
-          g.hud.setPrompt(null);
-          g.stamps.clear(false);
-          g.stamps.show("FISH LOST!", "watching", false, `${thief.def.name} slipped away through ${where}. Again!`);
-          g.audio.play("fail", { volume: 0.5 });
-          g.effects.sparkle(thief.center(), 18, 0xfff3b0, 2.2, 0.8);
-          g.effects.dust(thief.position, 10, 0.9, 0.8, 0.16);
-          g.time.slowMo(0.5, 0.35);
+          // a rival got away with the fish: Round 1 is lost
+          lostBy = thief;
+          lostWhere = g.brains[thief.id].escapePoint?.label ?? "the rooftops";
+          g.fsm.transition(GameState.FISH_LOST);
           return;
         }
         g.recorder.tick(g.runTime, () => g.snapshotRunner());
@@ -398,6 +262,60 @@ export function registerRunFlow(g: Game): void {
       }
       g.updateHUD();
       g.updateFollowCamera(realDt);
+    },
+  });
+
+  // ---------------------------------------------------------------- FISH_LOST
+  // A rival escaped with the fish. A short beat, then a defeat card with
+  // TRY AGAIN (same thief, fresh Round 1) or MAIN MENU.
+  g.fsm.register(GameState.FISH_LOST, {
+    enter: () => {
+      t = 0;
+      lostCard = false;
+      g.recorder.recording = false;
+      g.hud.setPrompt(null);
+      g.stamps.clear(false);
+      g.stamps.show("FISH LOST!", "watching", true);
+      g.audio.play("fail", { volume: 0.5 });
+      g.audio.duckMusic(5);
+      if (lostBy) {
+        g.effects.sparkle(lostBy.center(), 18, 0xfff3b0, 2.2, 0.8);
+        g.effects.dust(lostBy.position, 10, 0.9, 0.8, 0.16);
+      }
+      g.time.slowMo(0.5, 0.35);
+    },
+    update: (realDt) => {
+      t += realDt;
+      if (lostBy && t > 0.35) lostBy.rig.root.visible = false;
+      g.updateFollowCamera(realDt);
+      if (!lostCard && t > 1.3) {
+        lostCard = true;
+        g.input.exitPointerLock();
+        g.hud.show(false);
+        g.stamps.clear(false);
+        g.audio.setMusic("menu");
+        const s = g.telemetry.summary();
+        const roof = Math.round(g.runner.position.distanceTo(new THREE.Vector3(...SPAWN.goal)));
+        g.results.show({
+          success: false,
+          kind: "lost",
+          subtitle: `${lostBy ? lostBy.def.name.toUpperCase() : "A RIVAL"} GOT AWAY THROUGH ${lostWhere.toUpperCase()}`,
+          rows: [
+            ["RUN TIME", formatClock(g.runTime)],
+            ["GRIP LOST", String(s.gripLosses.length)],
+            ["PERFECT HISSES", String(s.perfectHisses)],
+            ["SAFE ROOFTOP", `${roof}m AWAY`],
+          ],
+        });
+      }
+      // Space / E also means TRY AGAIN once the card is up
+      if (lostCard && t > 1.8 && (g.input.consume("jump", 0.2) || g.input.consume("interact", 0.2))) g.fsm.transition(GameState.INTRO);
+    },
+    exit: () => {
+      g.results.show(null);
+      g.stamps.clear();
+      if (lostBy) lostBy.rig.root.visible = true;
+      lostBy = null;
     },
   });
 
@@ -451,20 +369,15 @@ export function registerRunFlow(g: Game): void {
         g.pigeons.update(dt, []);
         g.updateFollowCamera(realDt);
       } else if (stampStage === 0) {
-        stampStage = 1;
+        stampStage = 2;
         g.time.baseScale = 0;
         g.renderer.temporalUniforms.uFreeze.value = 1;
         g.audio.setMuffle(0.15, 0.25);
         g.hud.show(false);
-        g.stamps.show("RUN COMPLETE", "complete");
-        g.audio.play("stamp", { volume: 0.6 });
-      }
-      if (stampStage === 1 && t > 2.0) {
-        stampStage = 2;
         g.stamps.show("RUN RECORDED", "recorded");
         g.audio.play("stamp", { volume: 0.6 });
       }
-      if (stampStage === 2 && t > 3.2) {
+      if (stampStage === 2 && t > 2.0) {
         stampStage = 3;
         g.stamps.clear(false);
         // Cut to the watchers on the final-climb roof.
@@ -475,12 +388,10 @@ export function registerRunFlow(g: Game): void {
           r.lookTarget = g.runner.center();
         });
         const fc = g.runner.position;
+        // no words: the three cats on the roof say it
         g.camera.setCinematic(new THREE.Vector3(52.6, 7.25, -57.2), new THREE.Vector3(fc.x, fc.y + 0.6, fc.z), 3, true);
-        g.stamps.place("low");
-        g.stamps.show("BUT SOMEONE ELSE", "watching", true);
-        g.stamps.show("WAS WATCHING.", "watching", true);
-        g.audio.play("stamp", { volume: 0.5 });
-        g.others()[1]?.meow();
+        g.audio.play("tell", { volume: 0.35 });
+        g.others()[1]?.meow(false, true);
       }
       if (stampStage >= 3) {
         for (const c of g.others()) c.updateScripted(realDt);
@@ -488,7 +399,7 @@ export function registerRunFlow(g: Game): void {
       } else if (t >= 0.9) {
         g.camera.update(realDt, null, null);
       }
-      if (stampStage === 3 && t > 5.0) g.fsm.transition(GameState.ANALYZE_RUN);
+      if (stampStage === 3 && t > 3.3) g.fsm.transition(GameState.ANALYZE_RUN);
     },
     exit: () => {
       g.stamps.clear();

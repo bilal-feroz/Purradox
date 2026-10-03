@@ -4,7 +4,6 @@ import { PALETTE } from "../data/palette";
 import type { Game } from "../core/Game";
 import { GameState } from "../core/GameState";
 import { easeInOutCubic, formatClock } from "../core/math";
-import type { CouncilPlan } from "../ai/TacticalPlanner";
 
 const SELECT_SPOTS: Array<[number, number, number]> = [
   [-18.0, 0, 11.3],
@@ -18,9 +17,8 @@ const REWIND_SECONDS = 3.2;
 /** ANALYZE_RUN → REWIND → CAT_SELECTION */
 export function registerTransitionFlow(g: Game): void {
   let t = 0;
-  let planShown = false;
   let knownShown = false;
-  let resolved: CouncilPlan | null = null;
+  let mutters = 0;
   let streak: THREE.Mesh | null = null;
   let streakCount = 0;
   let head: THREE.Mesh | null = null;
@@ -29,26 +27,27 @@ export function registerTransitionFlow(g: Game): void {
   let done = false;
 
   // ---------------------------------------------------------------- ANALYZE_RUN
-  // THE ALLEY COUNCIL IS PLOTTING… → council map (your route, cats racing to
-  // their simulated intercepts, your profile) → COUNTER-PLAN → THEY KNOW YOUR
-  // ROUTE. About 4.7 s, then the rewind.
+  // The council map draws your route while each cat dashes to its simulated
+  // intercept; the only words are the plan on the card and one stamp, THEY
+  // KNOW YOUR ROUTE. About 3.5 s, then the rewind.
   g.fsm.register(GameState.ANALYZE_RUN, {
     enter: () => {
       t = 0;
-      planShown = false;
       knownShown = false;
-      resolved = null;
+      mutters = 0;
       // the plan was simulated when the run ended; an optional explanation
-      // layer may still be rewording it
+      // layer may still be renaming it
       g.planRequest?.then((p) => {
-        resolved = p;
-        if (p !== g.plan) g.councilMap.setPlanName(p.strategyName);
+        if (p === g.plan || !g.fsm.is(GameState.ANALYZE_RUN)) return;
+        g.plan = p;
+        g.councilMap.setPlanName(p.strategyName);
       });
       g.stamps.place("left");
-      g.stamps.show("THE ALLEY COUNCIL", "council", true);
-      g.stamps.show("IS PLOTTING…", "council", true);
-      g.audio.play("stamp", { volume: 0.45 });
-      if (g.plan) g.councilMap.show(g.plan, g.replay);
+      if (g.plan) {
+        g.councilMap.show(g.plan, g.replay);
+        g.debug?.log(`plan (${g.plan.source}): ${g.plan.strategyName} — ${g.plan.reason}`);
+      }
+      g.audio.play("stamp", { volume: 0.35 });
       // huddle: the three other cats gather in a little circle and plot
       const council = g.others();
       const center = new THREE.Vector3();
@@ -66,33 +65,20 @@ export function registerTransitionFlow(g: Game): void {
     },
     update: (dt) => {
       t += dt;
-      for (const r of g.others()) {
-        if (t > 0.5 && Math.random() < dt * 0.8) r.meow();
-        r.updateScripted(dt);
-      }
+      const council = g.others();
+      // two soft mutters from the huddle, not a meow storm
+      if (mutters < 2 && t > 0.6 + mutters * 1.1) council[mutters++ % council.length]?.meow(false, true);
+      for (const r of council) r.updateScripted(dt);
       g.camera.update(dt, null, null);
-      if (!planShown && t > 2.5) {
-        planShown = true;
-        const plan = resolved ?? g.plan;
-        if (plan) {
-          g.plan = plan;
-          g.stamps.clear(false);
-          g.stamps.show("COUNTER-PLAN", "council", true);
-          g.stamps.show(plan.strategyName, "strategy", false, plan.callout);
-          g.audio.play("stamp", { volume: 0.6 });
-          g.debug?.log(`plan (${plan.source}): ${plan.strategyName} — ${plan.reason}`);
-        }
-      }
-      if (planShown && !knownShown && t > 3.6) {
+      if (!knownShown && t > 2.2) {
         knownShown = true;
-        g.stamps.clear(false);
         g.stamps.show("THEY KNOW", "watching", true);
         g.stamps.show("YOUR ROUTE.", "watching", true);
         g.councilMap.markKnown();
-        g.audio.play("tell", { volume: 0.45 });
-        g.audio.play("stamp", { volume: 0.55 });
+        g.audio.play("tell", { volume: 0.4 });
+        g.audio.play("stamp", { volume: 0.5 });
       }
-      if (knownShown && t > 4.7) g.fsm.transition(GameState.REWIND);
+      if (knownShown && t > 3.5) g.fsm.transition(GameState.REWIND);
     },
     exit: () => {
       g.stamps.clear();
@@ -208,6 +194,11 @@ export function registerTransitionFlow(g: Game): void {
     exit: () => {
       g.stamps.clear();
       g.audio.setMuffle(1, 0.5);
+      // quitting mid-rewind: drop the streak and the temporal look
+      streak?.removeFromParent();
+      streak = null;
+      head?.removeFromParent();
+      g.renderer.temporalUniforms.uAmount.value = 0;
     },
   });
 

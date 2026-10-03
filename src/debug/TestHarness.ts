@@ -87,7 +87,6 @@ export class TestHarness {
     g.autoPause = false;
     if (g.fsm.state !== GameState.MENU && g.fsm.canTransition(GameState.MENU)) g.fsm.transition(GameState.MENU);
     g.runnerId = runner;
-    g.skipOpening = true;
     if (g.fsm.state === GameState.MENU) g.fsm.transition(GameState.INTRO);
     else if (g.fsm.canTransition(GameState.INTRO)) g.fsm.transition(GameState.INTRO);
     this.step(100);

@@ -1,9 +1,6 @@
-import { formatClock } from "../core/math";
 import { Random } from "../core/Random";
-import levelThumb from "../../docs/screenshots/02-round1-market-exit.jpg";
 import { el } from "./dom";
 import { ICONS } from "./icons";
-import { loadRecords } from "./records";
 
 export interface Settings {
   volume: number;
@@ -34,14 +31,13 @@ export class StartScreen {
   onSettings: ((s: Settings) => void) | null = null;
   private readonly settings: Settings;
   private readonly panel: HTMLDivElement;
-  private readonly levels: HTMLDivElement;
 
   constructor(parent: HTMLElement, initial: Settings) {
     this.settings = { ...initial };
     this.root = el("div", "screen", "");
     this.root.id = "start-screen";
     this.root.innerHTML = `
-      <div class="menu-veil" aria-hidden="true"></div>
+      <div class="menu-veil" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
       <div class="menu-foliage" aria-hidden="true">${ICONS.foliage}</div>
       <div class="menu-col">
         <div class="logo-card">
@@ -66,9 +62,6 @@ export class StartScreen {
             <span class="dash d-cta">${ICONS.dashes}</span>
             <span class="cta-paws">${ICONS.paw("rgba(150, 62, 16, 0.55)")}${ICONS.paw("rgba(150, 62, 16, 0.55)")}</span>
           </button>
-          <button class="btn-level interactive" data-act="levels">
-            <span class="lv-map">${ICONS.map}</span><span class="lv-label">LEVEL SELECT</span><span class="lv-chev">${ICONS.chevron}</span>
-          </button>
         </div>
         <div class="controls">
           <div class="controls-title"><i></i><span>CONTROLS</span><i></i></div>
@@ -91,27 +84,6 @@ export class StartScreen {
       <label title="The Alley Council remembers your last 5 runs in this browser and notices habits you repeat.">Alley Memory <input type="checkbox" data-s="alleyMemory"></label>`;
     this.root.appendChild(this.panel);
 
-    this.levels = el("div", "level-panel interactive");
-    this.levels.setAttribute("role", "dialog");
-    this.levels.setAttribute("aria-label", "Level select");
-    this.levels.innerHTML = `
-      <div class="panel-title">LEVEL SELECT</div>
-      <div class="lp-card">
-        <img class="lp-thumb" src="${levelThumb}" alt="Sardine Street market exit" />
-        <div class="lp-info">
-          <div class="lp-name">SARDINE STREET</div>
-          <div class="lp-route">Fish Market → Safe Rooftop · 8 zones · 2 rounds</div>
-          <div class="lp-stats">
-            <div><span>BEST ESCAPE</span><b data-rec="escape">—</b></div>
-            <div><span>FASTEST STEAL</span><b data-rec="steal">—</b></div>
-          </div>
-        </div>
-      </div>
-      <div class="lp-buttons">
-        <button class="btn ghost" data-act="levels-close">BACK</button>
-        <button class="btn orange" data-act="start">PLAY ${ICONS.chevron}</button>
-      </div>`;
-    this.root.appendChild(this.levels);
     parent.appendChild(this.root);
 
     for (const input of this.panel.querySelectorAll("input")) {
@@ -129,34 +101,24 @@ export class StartScreen {
       if (!btn) return;
       const act = btn.dataset.act;
       if (act === "start") this.onStart?.();
-      else if (act === "settings") {
-        this.levels.classList.remove("show");
-        this.panel.classList.toggle("show");
-      } else if (act === "levels") {
-        this.panel.classList.remove("show");
-        this.refreshRecords();
-        this.levels.classList.toggle("show");
-      } else if (act === "levels-close") this.levels.classList.remove("show");
+      else if (act === "settings") this.panel.classList.toggle("show");
       else if (act === "fullscreen") toggleFullscreen();
     });
   }
 
-  show(on: boolean): void {
-    this.root.classList.toggle("show", on);
-    if (!on) {
-      this.panel.classList.remove("show");
-      this.levels.classList.remove("show");
+  /** Settings changed elsewhere (the pause menu): refresh the sliders. */
+  setSettings(s: Settings): void {
+    Object.assign(this.settings, s);
+    for (const input of this.panel.querySelectorAll("input")) {
+      const key = input.dataset.s as keyof Settings;
+      if (input.type === "checkbox") input.checked = Boolean(s[key]);
+      else input.value = String(s[key]);
     }
   }
 
-  private refreshRecords(): void {
-    const r = loadRecords();
-    const set = (k: string, v: number | null) => {
-      const b = this.levels.querySelector(`[data-rec="${k}"]`);
-      if (b) b.textContent = v === null ? "—" : formatClock(v);
-    };
-    set("escape", r.bestEscape);
-    set("steal", r.fastestSteal);
+  show(on: boolean): void {
+    this.root.classList.toggle("show", on);
+    if (!on) this.panel.classList.remove("show");
   }
 }
 

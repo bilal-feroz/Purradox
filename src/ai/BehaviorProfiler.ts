@@ -125,8 +125,9 @@ export function deriveTags(fp: BehaviorFingerprint): BehaviorTag[] {
   if (fp.hesitationTime >= 3 || fp.avgSpeed < 4.4) {
     tags.push({ id: "cautious_carrier", title: "CAUTIOUS CARRIER", detail: `YOU STOOD STILL FOR ${fp.hesitationTime.toFixed(1)} SECONDS.`, score: 0.5 + Math.min(0.5, fp.hesitationTime / 10) });
   }
-  if (fp.sprintRatio >= 0.85) {
-    tags.push({ id: "full_throttle", title: "FULL THROTTLE", detail: `YOU SPRINTED ${pct(fp.sprintRatio)} OF THE WAY.`, score: 0.45 + (fp.sprintRatio - 0.85) * 2 });
+  // stamina caps sprinting near 60% of a run, so half the way is flat out
+  if (fp.sprintRatio >= 0.5) {
+    tags.push({ id: "full_throttle", title: "FULL THROTTLE", detail: `YOU SPRINTED ${pct(fp.sprintRatio)} OF THE WAY.`, score: 0.45 + (fp.sprintRatio - 0.5) * 2 });
   }
   if (fp.riskScore >= 0.6) {
     tags.push({ id: "risk_taker", title: "RISK TAKER", detail: `YOU BRUSHED PAST ${c.dangers} RIVALS AND LOST ${fp.fishGripLosses} GRIP.`, score: 0.5 + fp.riskScore * 0.4 });

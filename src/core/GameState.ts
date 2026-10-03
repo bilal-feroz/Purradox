@@ -9,6 +9,8 @@ export enum GameState {
   THIEF_SELECTION = "THIEF_SELECTION",
   INTRO = "INTRO",
   FISH_RUN = "FISH_RUN",
+  /** Round 1 defeat: a rival got away with the fish. */
+  FISH_LOST = "FISH_LOST",
   FISH_RUN_COMPLETE = "FISH_RUN_COMPLETE",
   ANALYZE_RUN = "ANALYZE_RUN",
   REWIND = "REWIND",
@@ -23,13 +25,14 @@ export const TRANSITIONS: Record<GameState, readonly GameState[]> = {
   [GameState.MENU]: [GameState.INTRO, GameState.THIEF_SELECTION],
   [GameState.THIEF_SELECTION]: [GameState.INTRO, GameState.MENU],
   [GameState.INTRO]: [GameState.FISH_RUN, GameState.MENU],
-  [GameState.FISH_RUN]: [GameState.FISH_RUN_COMPLETE, GameState.INTRO, GameState.MENU],
-  [GameState.FISH_RUN_COMPLETE]: [GameState.ANALYZE_RUN],
-  [GameState.ANALYZE_RUN]: [GameState.REWIND],
-  [GameState.REWIND]: [GameState.CAT_SELECTION],
+  [GameState.FISH_RUN]: [GameState.FISH_RUN_COMPLETE, GameState.FISH_LOST, GameState.INTRO, GameState.MENU],
+  [GameState.FISH_LOST]: [GameState.INTRO, GameState.MENU],
+  [GameState.FISH_RUN_COMPLETE]: [GameState.ANALYZE_RUN, GameState.MENU],
+  [GameState.ANALYZE_RUN]: [GameState.REWIND, GameState.MENU],
+  [GameState.REWIND]: [GameState.CAT_SELECTION, GameState.MENU],
   [GameState.CAT_SELECTION]: [GameState.HUNT, GameState.MENU],
   [GameState.HUNT]: [GameState.HUNT_COMPLETE, GameState.REWIND, GameState.INTRO, GameState.MENU],
-  [GameState.HUNT_COMPLETE]: [GameState.RESULTS],
+  [GameState.HUNT_COMPLETE]: [GameState.RESULTS, GameState.MENU],
   [GameState.RESULTS]: [GameState.REWIND, GameState.INTRO, GameState.MENU, GameState.THIEF_SELECTION],
 };
 

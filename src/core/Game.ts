@@ -141,9 +141,9 @@ export class Game {
   readonly pops: ComicPops;
   /** Smoothed 0..1 music pressure (rivals closing in, the final climb). */
   private musicPressure = 0;
-  /** Set to skip the Round 1 opening sweep (tests / automation). */
-  skipOpening = false;
   readonly pause: PauseMenu;
+  /** Audio muffle level to restore when the pause menu closes. */
+  private unpausedMuffle = 1;
   readonly fadeEl: HTMLDivElement;
   readonly temporalVignette: HTMLDivElement;
 
@@ -197,7 +197,7 @@ export class Game {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    uiRoot: HTMLElement,
+    private readonly uiRoot: HTMLElement,
   ) {
     this.settings = loadSettings();
     this.renderer = new Renderer(canvas);
@@ -554,6 +554,7 @@ export class Game {
     this.start.onSettings = (s) => this.applySettings(s);
     this.select.onPick = (id) => {
       this.audio.play("ui");
+      this.actors[id].meow();
       this.input.requestPointerLock();
       if (this.fsm.state === GameState.THIEF_SELECTION) {
         this.runnerId = id;
@@ -565,8 +566,7 @@ export class Game {
     };
     this.select.onHover = (id) => {
       if (id) {
-        this.actors[id].meow();
-        this.audio.play("ui", { pitch: 1.2 });
+        this.audio.play("ui", { pitch: 1.2, volume: 0.5 });
       }
     };
     this.select.onBack = () => {
@@ -587,6 +587,14 @@ export class Game {
       shot.getContext("2d")?.drawImage(src, 0, 0);
       return renderShareCard(info, shot);
     };
+    this.results.onRetry = () => {
+      this.audio.play("ui");
+      if (this.fsm.state === GameState.FISH_LOST) this.fsm.transition(GameState.INTRO);
+    };
+    this.results.onMenu = () => {
+      this.audio.play("ui");
+      if (this.fsm.canTransition(GameState.MENU)) this.fsm.transition(GameState.MENU);
+    };
     this.results.onNewRun = () => {
       this.audio.play("ui");
       if (this.fsm.state !== GameState.RESULTS) return;
@@ -594,6 +602,8 @@ export class Game {
       else this.fsm.transition(GameState.INTRO);
     };
     this.pause.onResume = () => this.setPaused(false);
+    this.pause.onSettings = (s) => this.applySettings(s);
+    this.select.blocked = () => this.paused;
     this.pause.onRestart = () => {
       this.setPaused(false);
       if (this.fsm.state === GameState.FISH_RUN) this.fsm.transition(GameState.INTRO);
@@ -611,7 +621,10 @@ export class Game {
       if (!locked && this.autoPause && this.isGameplay() && !this.paused && this.time.realTime > 1) this.setPaused(true);
     });
     window.addEventListener("keydown", (e) => {
-      if (e.code === "Escape" && this.isGameplay()) this.setPaused(!this.paused);
+      if (e.code === "Escape" && this.canPause()) {
+        e.preventDefault();
+        this.setPaused(!this.paused);
+      }
       if (e.code === "KeyF" && !this.isGameplay()) document.documentElement.requestFullscreen?.().catch(() => undefined);
     });
     window.addEventListener("blur", () => {
@@ -627,6 +640,7 @@ export class Game {
 
   applySettings(s: Settings): void {
     this.settings = s;
+    this.start.setSettings(s);
     this.input.sensitivity = s.sensitivity;
     this.input.invertY = s.invertY;
     this.audio.setVolume(s.volume);
@@ -642,6 +656,11 @@ export class Game {
     return this.fsm.is(GameState.FISH_RUN, GameState.HUNT);
   }
 
+  /** Esc works on every screen once the game has left the main menu. */
+  canPause(): boolean {
+    return !this.fsm.is(GameState.BOOT, GameState.MENU);
+  }
+
   isControlled(cat: CatId): boolean {
     return this.controlled !== null && this.controlled.id === cat;
   }
@@ -650,13 +669,18 @@ export class Game {
     if (on === this.paused) return;
     this.paused = on;
     this.time.paused = on;
-    this.pause.show(on);
-    this.audio.setMuffle(on ? 0.25 : 1, 0.1);
+    this.pause.setSettings(this.settings);
+    this.pause.show(on, this.isGameplay());
+    // cutscene animations (stamps, council map) hold still too
+    this.uiRoot.classList.toggle("is-paused", on);
     if (on) {
+      this.unpausedMuffle = this.audio.muffle;
+      this.audio.setMuffle(0.25, 0.1);
       this.input.exitPointerLock();
       this.input.resetAll();
     } else {
-      this.input.requestPointerLock();
+      this.audio.setMuffle(this.unpausedMuffle, 0.1);
+      if (this.isGameplay()) this.input.requestPointerLock();
       this.time.resync(performance.now());
     }
   }
@@ -935,6 +959,9 @@ export class Game {
       this.hud.setAbility("scent", ab.scentCooldown / ab.scentCooldownMax, this.scentT < 0.9);
       const it = this.interactables.nearest(ctl);
       this.hud.setPrompt(it ? it.label : null);
+      this.updateStaminaRing(ctl);
+    } else {
+      this.hud.setStamina(0, 0, 1, false, false);
     }
     const runner = this.runner;
     if (this.round === 1) {
@@ -968,6 +995,25 @@ export class Game {
         this.hud.setObjective("", "", false);
       }
     }
+  }
+
+  /** The stamina ring sits just right of your cat while the bar isn't full. */
+  private updateStaminaRing(ctl: CatActor): void {
+    const m = ctl.movement;
+    const show = this.isGameplay() && !this.paused && (m.stamina < 0.995 || m.sprinting);
+    if (!show) {
+      this.hud.setStamina(0, 0, m.stamina, m.winded, false);
+      return;
+    }
+    const cam = this.camera.camera;
+    const p = this.tmp.copy(ctl.position).setY(ctl.position.y + 0.55).project(cam);
+    if (p.z > 1 || Math.abs(p.x) > 1.1 || Math.abs(p.y) > 1.1) {
+      this.hud.setStamina(0, 0, m.stamina, m.winded, false);
+      return;
+    }
+    const x = (p.x * 0.5 + 0.5) * window.innerWidth + 64;
+    const y = (-p.y * 0.5 + 0.5) * window.innerHeight - 10;
+    this.hud.setStamina(x, y, m.stamina, m.winded, true);
   }
 
   /** Round 1 forgiveness: the thief tightens its grip after a clean stretch. */
@@ -1042,7 +1088,7 @@ export class Game {
     this.time.tick(nowMs);
     this.input.beginFrame(this.time.realTime);
     const dt = this.time.simDt;
-    this.fsm.update(this.time.realDt);
+    this.fsm.update(this.paused ? 0 : this.time.realDt);
     this.water.update(this.time.realTime);
     this.sky.update(this.time.realDt);
     this.beacon.update(this.time.realTime, this.camera.camera.position, this.fsm.is(GameState.INTRO, GameState.FISH_RUN, GameState.HUNT), this.round === 2);

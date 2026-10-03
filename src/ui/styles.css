@@ -217,13 +217,66 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+/* Progressive blur: five layers, each a little blurrier than the one to its
+   right, so the menu side melts into the sharp street with no seam (a
+   single masked blur cross-fades a blurred and a sharp copy instead). */
+.menu-veil i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  --fade: linear-gradient(90deg, transparent 0%, #000 36%, #000 64%, transparent 100%);
+  -webkit-mask-image: var(--fade);
+  mask-image: var(--fade);
+}
+
+.menu-veil i:nth-child(1) {
+  left: 50%;
+  width: 24%;
+  -webkit-backdrop-filter: blur(0.6px);
+  backdrop-filter: blur(0.6px);
+}
+
+.menu-veil i:nth-child(2) {
+  left: 42%;
+  width: 22%;
+  -webkit-backdrop-filter: blur(1.4px);
+  backdrop-filter: blur(1.4px);
+}
+
+.menu-veil i:nth-child(3) {
+  left: 34%;
+  width: 22%;
+  -webkit-backdrop-filter: blur(2.6px);
+  backdrop-filter: blur(2.6px);
+}
+
+.menu-veil i:nth-child(4) {
+  left: 26%;
+  width: 22%;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.menu-veil i:nth-child(5) {
+  left: 0;
+  width: 40%;
+  --fade: linear-gradient(90deg, #000 0%, #000 80%, transparent 100%);
   -webkit-backdrop-filter: blur(6px) saturate(1.06);
   backdrop-filter: blur(6px) saturate(1.06);
+}
+
+/* warm shade behind the menu, fading out the same way */
+.menu-veil::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   background:
-    linear-gradient(90deg, rgba(30, 22, 14, 0.2) 0%, rgba(30, 22, 14, 0.08) 42%, rgba(30, 22, 14, 0) 62%),
+    linear-gradient(90deg, rgba(30, 22, 14, 0.2) 0%, rgba(30, 22, 14, 0.08) 42%, rgba(30, 22, 14, 0) 70%),
     linear-gradient(0deg, rgba(26, 19, 12, 0.42) 0%, rgba(26, 19, 12, 0) 36%);
-  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 40%, rgba(0, 0, 0, 0.55) 52%, transparent 66%);
-  mask-image: linear-gradient(90deg, #000 0%, #000 40%, rgba(0, 0, 0, 0.55) 52%, transparent 66%);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 40%, rgba(0, 0, 0, 0.5) 55%, transparent 74%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 40%, rgba(0, 0, 0, 0.5) 55%, transparent 74%);
 }
 
 #start-screen::after {
@@ -570,55 +623,6 @@ body {
   transform: rotate(-12deg);
 }
 
-.btn-level {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--u) * 1.4);
-  width: 55%;
-  padding: calc(var(--u) * 1.05) calc(var(--u) * 1.7) calc(var(--u) * 0.85) calc(var(--u) * 2);
-  font-family: var(--font-display);
-  font-size: calc(var(--u) * 1.95);
-  line-height: 1;
-  letter-spacing: calc(var(--u) * 0.06);
-  color: var(--navy);
-  background: linear-gradient(180deg, #fdfaf3 0%, #ede4d3 100%);
-  border: none;
-  border-radius: calc(var(--u) * 1);
-  box-shadow:
-    0 calc(var(--u) * 0.4) 0 #b5a893,
-    0 calc(var(--u) * 0.8) calc(var(--u) * 1.2) rgba(40, 28, 16, 0.32);
-  cursor: pointer;
-  transition: transform 0.14s cubic-bezier(0.3, 1.8, 0.5, 1);
-}
-
-.btn-level:hover {
-  transform: translateY(-2px) scale(1.03);
-}
-
-.btn-level:active {
-  transform: translateY(2px) scale(0.98);
-}
-
-.lv-map svg {
-  display: block;
-  width: calc(var(--u) * 2.4);
-  height: calc(var(--u) * 2);
-}
-
-.lv-label {
-  padding-top: 0.1em;
-}
-
-.lv-chev {
-  margin-left: auto;
-}
-
-.lv-chev svg {
-  display: block;
-  width: calc(var(--u) * 1.1);
-  height: calc(var(--u) * 1.6);
-}
-
 /* controls */
 .controls {
   width: calc(var(--u) * 45);
@@ -776,9 +780,48 @@ body {
     --u: min(1.9vw, 1.15vh);
   }
 
-  .menu-veil {
-    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 42%, transparent 62%);
-    mask-image: linear-gradient(180deg, #000 0%, #000 42%, transparent 62%);
+  /* portrait: the menu sits on top, so the blur steps down vertically */
+  .menu-veil i {
+    left: 0;
+    right: 0;
+    width: auto;
+    --fade: linear-gradient(180deg, transparent 0%, #000 36%, #000 64%, transparent 100%);
+  }
+
+  .menu-veil i:nth-child(1) {
+    top: 52%;
+    bottom: auto;
+    height: 18%;
+  }
+
+  .menu-veil i:nth-child(2) {
+    top: 46%;
+    bottom: auto;
+    height: 16%;
+  }
+
+  .menu-veil i:nth-child(3) {
+    top: 40%;
+    bottom: auto;
+    height: 16%;
+  }
+
+  .menu-veil i:nth-child(4) {
+    top: 34%;
+    bottom: auto;
+    height: 16%;
+  }
+
+  .menu-veil i:nth-child(5) {
+    top: 0;
+    bottom: auto;
+    height: 44%;
+    --fade: linear-gradient(180deg, #000 0%, #000 80%, transparent 100%);
+  }
+
+  .menu-veil::after {
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 42%, transparent 66%);
+    mask-image: linear-gradient(180deg, #000 0%, #000 42%, transparent 66%);
   }
 }
 
@@ -873,115 +916,6 @@ body {
 .settings-panel input[type="range"] {
   width: 140px;
   accent-color: var(--orange);
-}
-
-.level-panel {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 5;
-  width: min(92vw, calc(var(--u) * 58));
-  padding: calc(var(--u) * 1.8);
-  font-family: var(--font-ui);
-  background: var(--cream);
-  border: 3px solid var(--ink);
-  border-radius: 20px;
-  box-shadow:
-    0 8px 0 var(--ink),
-    0 24px 60px rgba(0, 0, 0, 0.35);
-  opacity: 0;
-  visibility: hidden;
-  transform: translate(-50%, -46%) scale(0.96);
-  transition:
-    opacity 0.2s ease,
-    transform 0.25s cubic-bezier(0.3, 1.5, 0.5, 1),
-    visibility 0s linear 0.25s;
-}
-
-.level-panel.show {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(-50%, -50%);
-  transition:
-    opacity 0.2s ease,
-    transform 0.25s cubic-bezier(0.3, 1.5, 0.5, 1),
-    visibility 0s;
-}
-
-.lp-card {
-  display: flex;
-  gap: calc(var(--u) * 1.4);
-  padding: calc(var(--u) * 1);
-  background: #fff;
-  border: 3px solid var(--orange);
-  border-radius: 14px;
-  box-shadow: 0 0 0 4px rgba(240, 129, 47, 0.22);
-}
-
-.lp-thumb {
-  flex: none;
-  width: calc(var(--u) * 22);
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  border: 3px solid var(--ink);
-  border-radius: 10px;
-}
-
-.lp-info {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--u) * 0.6);
-  min-width: 0;
-}
-
-.lp-name {
-  font-family: var(--font-display);
-  font-size: calc(var(--u) * 2.4);
-  color: var(--teal-dark);
-}
-
-.lp-route {
-  font-weight: 600;
-  font-size: calc(var(--u) * 1.15);
-  color: #4b5a63;
-}
-
-.lp-stats {
-  display: flex;
-  gap: calc(var(--u) * 1.6);
-  margin-top: auto;
-}
-
-.lp-stats div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.lp-stats span {
-  font-weight: 700;
-  font-size: calc(var(--u) * 0.95);
-  letter-spacing: 0.08em;
-  color: #7a868c;
-}
-
-.lp-stats b {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: calc(var(--u) * 1.8);
-  color: var(--navy);
-}
-
-.lp-buttons {
-  display: flex;
-  justify-content: flex-end;
-  gap: calc(var(--u) * 1);
-  margin-top: calc(var(--u) * 1.4);
-}
-
-.lp-buttons .btn svg {
-  width: 0.7em;
-  height: 1em;
 }
 
 /* ------------------------------------------------------------------ HUD */
@@ -1793,7 +1727,7 @@ body {
   letter-spacing: 0.1em;
   color: #6c7a82;
   opacity: 0;
-  animation: cm-fade 0.35s ease 1.25s forwards;
+  animation: cm-fade 0.35s ease 1s forwards;
 }
 
 .cm-row b {
@@ -1805,19 +1739,19 @@ body {
   text-align: right;
 }
 
-.cm-detail {
-  font-family: var(--font-ui);
-  font-weight: 600;
-  font-size: 12px;
-  color: #56636b;
-  text-align: right;
-  opacity: 0;
-  animation: cm-fade 0.35s ease 1.45s forwards;
-}
-
 .cm-row.plan {
   margin-top: 4px;
-  animation-delay: 2.45s;
+  animation-delay: 1.5s;
+}
+
+.cm-tag {
+  display: block;
+  font-family: var(--font-ui);
+  font-style: normal;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--orange);
 }
 
 .cm-row.plan b {
@@ -2234,6 +2168,42 @@ body {
   color: #5d6a72;
 }
 
+.pause-settings {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 2px dashed rgba(29, 42, 51, 0.25);
+  border-radius: 12px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+}
+
+.pause-settings.show {
+  display: flex;
+}
+
+.pause-settings label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.pause-settings input[type="range"] {
+  width: 140px;
+  accent-color: var(--orange);
+}
+
+/* paused: cutscene words and the council map hold still */
+#ui-root.is-paused #stamps *,
+#ui-root.is-paused .council-map *,
+#ui-root.is-paused .comic-pops * {
+  animation-play-state: paused !important;
+}
+
 /* lock hint */
 .click-hint {
   position: absolute;
@@ -2263,26 +2233,71 @@ body {
   z-index: 40;
 }
 
-/* opening sweep */
-.opening-skip {
+/* sprint stamina ring beside your cat */
+.stamina {
   position: absolute;
-  left: 50%;
-  bottom: 22px;
-  transform: translateX(-50%);
-  font-family: var(--font-ui);
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 2px;
-  color: rgba(255, 248, 232, 0.85);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.35s ease;
   pointer-events: none;
-  z-index: 5;
+  will-change: transform;
 }
 
-.opening-skip.show {
+.stamina.show {
   opacity: 1;
+}
+
+.stamina svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+
+.stamina .st-bg {
+  fill: rgba(29, 42, 51, 0.38);
+  stroke: rgba(244, 236, 221, 0.35);
+  stroke-width: 5;
+}
+
+.stamina .st-fg {
+  fill: none;
+  stroke: #8fe08a;
+  stroke-width: 5;
+  stroke-linecap: round;
+  transition: stroke 0.2s ease;
+}
+
+.stamina.low .st-fg {
+  stroke: var(--gold);
+}
+
+.stamina.winded .st-fg {
+  stroke: var(--coral);
+}
+
+.stamina.winded .st-bg {
+  fill: rgba(110, 34, 28, 0.55);
+  stroke: rgba(239, 111, 91, 0.75);
+}
+
+/* pulse the ring itself: scaling the positioned wrapper would scale its
+   translate() too and fling it across the screen */
+.stamina.winded svg {
+  animation: stamina-pulse 0.45s ease-in-out infinite alternate;
+}
+
+@keyframes stamina-pulse {
+  from {
+    scale: 1;
+  }
+  to {
+    scale: 1.18;
+  }
 }
 
 /* comic words over the cats */

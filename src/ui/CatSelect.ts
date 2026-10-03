@@ -22,6 +22,8 @@ export class CatSelect {
   onPick: ((id: CatId) => void) | null = null;
   onHover: ((id: CatId | null) => void) | null = null;
   onBack: (() => void) | null = null;
+  /** True while input should be ignored (the pause menu is open). */
+  blocked: (() => boolean) | null = null;
   private readonly titleEl: HTMLDivElement;
   private readonly subEl: HTMLDivElement;
   private readonly cardsEl: HTMLDivElement;
@@ -52,14 +54,13 @@ export class CatSelect {
     this.root.append(head, this.cardsEl, this.recapEl, this.backEl);
     parent.appendChild(this.root);
     window.addEventListener("keydown", (e) => {
-      if (!this.enabled || this.ids.length === 0) return;
+      if (!this.enabled || this.ids.length === 0 || this.blocked?.()) return;
       const n = this.ids.length;
       const digit = Number.parseInt(e.key, 10);
       if (digit >= 1 && digit <= n) this.pick(this.ids[digit - 1]);
       else if (e.code === "ArrowLeft" || e.code === "KeyA") this.moveFocus(n - 1);
       else if (e.code === "ArrowRight" || e.code === "KeyD") this.moveFocus(1);
       else if (e.code === "Enter" || e.code === "Space") this.pick(this.ids[this.focus]);
-      else if (e.code === "Escape" && this.allowBack) this.onBack?.();
     });
   }
 

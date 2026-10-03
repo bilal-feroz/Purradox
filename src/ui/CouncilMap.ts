@@ -90,7 +90,7 @@ export class CouncilMap {
     const profile = plan.profile;
     this.root.innerHTML = `
       <div class="cm-card">
-        <div class="cm-head">SARDINE STREET <span>· COUNCIL MAP</span></div>
+        <div class="cm-head">THE ALLEY COUNCIL</div>
         <svg class="cm-svg" viewBox="-12 -12 ${W + 24} ${H + 24}" aria-hidden="true">
           ${zones}
           ${route}
@@ -99,9 +99,8 @@ export class CouncilMap {
           ${cats}
         </svg>
         <div class="cm-rows">
-          ${profile ? `<div class="cm-row"><span>PLAYER PROFILE</span><b>${profile.title}</b></div><div class="cm-detail">${profile.detail}</div>` : ""}
-          <div class="cm-row plan"><span>COUNTER-PLAN</span><b>${plan.strategyName}</b></div>
-          ${plan.memory ? `<div class="cm-row memory"><span>ALLEY MEMORY</span></div><div class="cm-detail">${plan.memory.line}</div>` : ""}
+          ${profile ? `<div class="cm-row"><span>YOU</span><b>${profile.title}</b></div>` : ""}
+          <div class="cm-row plan"><span>THE PLAN</span><b>${plan.strategyName}${plan.memory && plan.memory.counter === plan.strategyId ? `<i class="cm-tag" title="${plan.memory.line}">${plan.memory.streak} RUNS IN A ROW</i>` : ""}</b></div>
         </div>
       </div>`;
     this.root.classList.remove("show", "known");

@@ -121,7 +121,11 @@ export class AudioManager {
   }
 
   /** Muffle everything (freeze beats, pause). 1 = open, 0 = heavily filtered. */
+  /** Current muffle target (1 = open, 0 = fully muffled). */
+  muffle = 1;
+
   setMuffle(open: number, time = 0.2): void {
+    this.muffle = open;
     if (!this.ctx) return;
     const f = 300 + Math.pow(Math.max(0, Math.min(1, open)), 2) * 19700;
     this.filter.frequency.setTargetAtTime(f, this.ctx.currentTime, time);
@@ -183,7 +187,7 @@ export class AudioManager {
     bus.on("pounceHit", (e) => this.play("hit", { at: e, volume: e.gripDamage ? 0.7 : 0.55 }));
     bus.on("hissStart", (e) => this.play("hiss", { at: e, volume: 0.5, cat: e.cat }));
     bus.on("perfectHiss", (e) => this.play("perfect", { at: e, volume: 0.7 }));
-    bus.on("meow", (e) => this.play(e.aggressive ? "yowl" : "meow", { volume: e.aggressive ? 0.38 : 0.45, cat: e.cat }));
+    bus.on("meow", (e) => this.play(e.aggressive ? "yowl" : "meow", { volume: e.aggressive ? 0.36 : e.quiet ? 0.16 : 0.34, cat: e.cat }));
     bus.on("fishPickup", (e) => this.play(e.recovered ? "recovered" : e.stolen ? "stolen" : "pickup", { at: e, volume: 0.5 }));
     bus.on("fishDrop", (e) => this.play("drop", { at: e, volume: 0.55 }));
     bus.on("pigeonsBurst", (e) => this.play("pigeons", { at: e, volume: Math.min(0.7, 0.25 + e.count * 0.04) }));

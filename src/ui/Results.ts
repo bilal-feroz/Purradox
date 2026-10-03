@@ -9,6 +9,8 @@ export interface ResultStats {
   subtitle?: string;
   /** What the optional share card says. */
   share?: ShareInfo;
+  /** "hunt" (the end of both rounds, default) or "lost" (Round 1 defeat). */
+  kind?: "hunt" | "lost";
 }
 
 /** Two clear outcomes with a handful of real stats, and an optional share card. */
@@ -16,6 +18,8 @@ export class Results {
   readonly root: HTMLDivElement;
   onRunItBack: (() => void) | null = null;
   onNewRun: (() => void) | null = null;
+  onRetry: (() => void) | null = null;
+  onMenu: (() => void) | null = null;
   /** Renders the share card (the game supplies the backdrop). */
   onShare: ((info: ShareInfo) => Promise<HTMLCanvasElement>) | null = null;
   private current: ResultStats | null = null;
@@ -31,6 +35,8 @@ export class Results {
       if (!b) return;
       if (b.dataset.act === "back") this.onRunItBack?.();
       if (b.dataset.act === "new") this.onNewRun?.();
+      if (b.dataset.act === "retry") this.onRetry?.();
+      if (b.dataset.act === "menu") this.onMenu?.();
       if (b.dataset.act === "share") void this.openShare();
       if (b.dataset.act === "download" && this.card) downloadCard(this.card);
       if (b.dataset.act === "close") this.root.querySelector(".result-card")?.classList.remove("sharing");
@@ -44,17 +50,22 @@ export class Results {
       this.root.classList.remove("show");
       return;
     }
-    const title = stats.success ? "TIMELINE<br>BROKEN" : "PAST YOU<br>WAS TOO GOOD";
+    const lost = stats.kind === "lost";
+    const title = lost ? "FISH<br>LOST" : stats.success ? "TIMELINE<br>BROKEN" : "PAST YOU<br>WAS TOO GOOD";
+    const buttons = lost
+      ? `<button class="btn orange interactive" data-act="retry">TRY AGAIN</button>
+            <button class="btn ghost interactive" data-act="menu">MAIN MENU</button>`
+      : `<button class="btn interactive" data-act="back">RUN IT BACK</button>
+            <button class="btn blue interactive" data-act="new"><span>NEW RUN</span>${ICONS.play}</button>`;
     this.root.innerHTML = `
       <div class="result-card interactive">
-        <div class="result-ribbon ${stats.success ? "success" : "failure"}">${stats.success ? "SUCCESS" : "FAILURE"}</div>
+        <div class="result-ribbon ${stats.success ? "success" : "failure"}">${lost ? "CAUGHT" : stats.success ? "SUCCESS" : "FAILURE"}</div>
         <div class="result-title">${title}</div>
         ${stats.subtitle ? `<div class="result-sub">${stats.subtitle}</div>` : ""}
         <div class="result-main">
           <div class="stats">${stats.rows.map(([k, v]) => `<div class="row"><span>${k}</span><span>${v}</span></div>`).join("")}</div>
           <div class="result-buttons">
-            <button class="btn interactive" data-act="back">RUN IT BACK</button>
-            <button class="btn blue interactive" data-act="new"><span>NEW RUN</span>${ICONS.play}</button>
+            ${buttons}
           </div>
           ${stats.share ? `<button class="share-link interactive" data-act="share">MAKE A SHARE CARD</button>` : ""}
         </div>

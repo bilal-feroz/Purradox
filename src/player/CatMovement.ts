@@ -4,6 +4,7 @@ import type { CatStats } from "../data/cats";
 import { clamp } from "../core/math";
 import type { PhysicsWorld } from "../physics/PhysicsWorld";
 import { GROUP_CAT, GROUP_ECHO } from "../physics/CollisionLayers";
+import { fullStamina, stepStamina, type StaminaState } from "./Stamina";
 
 export const CAPSULE_RADIUS = 0.3;
 export const CAPSULE_HALF = 0.12;
@@ -51,7 +52,7 @@ interface Arc {
  * air control, coyote time, jump buffering, variable jump height, ground
  * snapping and a ledge-mantle assist so near-miss jumps still land.
  */
-export class CatMovement {
+export class CatMovement implements StaminaState {
   readonly position = new THREE.Vector3();
   readonly velocity = new THREE.Vector3();
   grounded = true;
@@ -59,6 +60,11 @@ export class CatMovement {
   yaw = 0;
   turnRate = 0;
   sprinting = false;
+  /** Sprint stamina, 0..1 (see Stamina.ts). */
+  stamina = 1;
+  /** Ran the bar dry: no sprinting until it refills a little. */
+  winded = false;
+  sinceSprint = 99;
   /** Set true on the frame the cat left the ground via jump. */
   jumped = false;
   /** Set true on the frame the cat landed; impact in 0..1. */
@@ -117,6 +123,11 @@ export class CatMovement {
     this.lastSafe.copy(spawn);
   }
 
+  /** Full sprint bar (new round, world reset). */
+  refillStamina(): void {
+    fullStamina(this);
+  }
+
   /** Instantly place the cat (reset, respawn, replay). */
   teleport(p: THREE.Vector3, yaw?: number): void {
     this.position.copy(p);
@@ -170,7 +181,9 @@ export class CatMovement {
 
     const st = this.stats;
     // -------------------------------------------------- horizontal
-    this.sprinting = intent.sprint && mods.control > 0.5;
+    // sprinting costs stamina only while actually moving
+    const wantsSprint = intent.sprint && mods.control > 0.5 && intent.moveX * intent.moveX + intent.moveZ * intent.moveZ > 0.04;
+    this.sprinting = stepStamina(this, wantsSprint, dt);
     const maxSpeed = (this.sprinting ? st.sprintSpeed : st.runSpeed) * mods.speedScale;
     this.target.set(intent.moveX, 0, intent.moveZ).multiplyScalar(maxSpeed * mods.control);
     this.horiz.set(this.velocity.x, 0, this.velocity.z);

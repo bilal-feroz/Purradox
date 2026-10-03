@@ -176,10 +176,10 @@ export class CatActor {
     this.forcedActionT = 0;
   }
 
-  /** A meow (or, `aggressive`, the yowl a rival lets out when it spots you). */
-  meow(aggressive = false): void {
+  /** A meow (`aggressive`: the yowl a rival lets out when it spots you; `quiet`: cutscene mutter). */
+  meow(aggressive = false, quiet = false): void {
     this.meowT = aggressive ? 0.7 : 0.45;
-    this.bus.emit("meow", aggressive ? { cat: this.id, aggressive } : { cat: this.id });
+    this.bus.emit("meow", { cat: this.id, aggressive, quiet });
   }
 
   teleport(p: THREE.Vector3, yaw: number): void {
@@ -207,6 +207,7 @@ export class CatActor {
     this.intent.jumpHeld = false;
     this.intent.sprint = false;
     this.abilities.resetCooldowns();
+    this.movement.refillStamina();
     this.visualOffset.set(0, 0, 0);
     this.visualOffsetVel.set(0, 0, 0);
     this.speedScale = 1;

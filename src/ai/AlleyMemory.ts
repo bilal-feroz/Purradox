@@ -90,7 +90,7 @@ export function recallHabit(history: MemoryEntry[], current: MemoryEntry): Alley
     { id: "props", streak: streak((e) => e.interactions >= 2), line: "", counter: "the_bait" },
     { id: "hisses", streak: streak((e) => e.hisses >= 3), line: "", counter: "the_bait" },
     { id: "route", streak: streak((e) => e.route === current.route), line: "", counter: ROUTE_COUNTERS[current.route] },
-    { id: "speed", streak: streak((e) => e.avgSpeed >= 6.5 && e.sprintRatio >= 0.85), line: "", counter: "the_rush" },
+    { id: "speed", streak: streak((e) => e.avgSpeed >= 6 && e.sprintRatio >= 0.5), line: "", counter: "the_rush" },
   ];
   let best: AlleyHabit | null = null;
   for (const h of found) if (h.streak >= MEMORY_STREAK && (!best || h.streak > best.streak)) best = h;

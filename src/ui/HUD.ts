@@ -39,6 +39,8 @@ export class HUD {
   private readonly tracker: HTMLDivElement;
   private readonly trackerArrow: HTMLDivElement;
   private trackerClass = "";
+  private readonly stamina: HTMLDivElement;
+  private readonly staminaArc: SVGCircleElement;
   private lastGrip = 3;
   private objectiveVisibleUntil = 0;
 
@@ -46,6 +48,12 @@ export class HUD {
     this.root = el("div", "screen");
     this.root.id = "hud";
     parent.appendChild(this.root);
+
+    // sprint stamina: a little ring beside your cat
+    this.stamina = el("div", "stamina");
+    this.stamina.innerHTML = `<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="st-bg" cx="20" cy="20" r="14"/><circle class="st-fg" cx="20" cy="20" r="14"/></svg>`;
+    this.staminaArc = this.stamina.querySelector(".st-fg") as SVGCircleElement;
+    this.root.appendChild(this.stamina);
 
     const tl = el("div", "hud-tl");
     this.roundTag = el("div", "round-tag", "ROUND 1");
@@ -116,6 +124,17 @@ export class HUD {
   }
 
   private readonly lockHint: HTMLDivElement;
+
+  /** Sprint stamina beside the cat (screen px); hidden while full. */
+  setStamina(x: number, y: number, value: number, winded: boolean, show: boolean): void {
+    this.stamina.classList.toggle("show", show);
+    if (!show) return;
+    const c = 2 * Math.PI * 14;
+    this.stamina.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    this.staminaArc.style.strokeDasharray = `${(c * Math.max(0, Math.min(1, value))).toFixed(1)} ${c.toFixed(1)}`;
+    this.stamina.classList.toggle("winded", winded);
+    this.stamina.classList.toggle("low", !winded && value < 0.3);
+  }
 
   setLockHint(show: boolean): void {
     const want = show ? "block" : "none";
