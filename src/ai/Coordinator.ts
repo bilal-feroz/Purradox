@@ -98,6 +98,29 @@ export class Coordinator {
     return m;
   }
 
+  /**
+   * Opening move: the earliest point on Past You's route this ally can reach
+   * in time. Taken only when it comes well before the planned intercept, so
+   * a cat that starts near the market harasses Past You on the way there
+   * instead of walking off to wait.
+   */
+  firstStrike(cat: CatId, from: { x: number; y: number; z: number }, before: number): CoordMission | null {
+    const agent = this.agents.get(cat);
+    if (!agent) return null;
+    const start = this.graph.nearest(from.x, from.y, from.z);
+    let best: NodePass | null = null;
+    for (const p of this.trace.passes) {
+      if (p.t > before - 5 || p.progress > 0.5 || p.dist > 2.5) continue;
+      if (best && p.t >= best.t) continue;
+      const len = Math.hypot(start.x - from.x, start.z - from.z) + this.graph.pathLength(this.graph.path(start, p.node));
+      if (p.t - (len / Math.max(1, agent.speed) + REACTION) < MIN_SLACK) continue;
+      best = p;
+    }
+    if (!best) return null;
+    this.note(0, "replan", cat, `first strike at ${best.zone} (${best.t.toFixed(1)}s)`);
+    return { cat, role: "early_pressure", point: [best.node.x, best.node.y, best.node.z], arriveAt: best.t, zone: best.zone, prop: null, nodeId: best.node.id, source: "plan" };
+  }
+
   /** Discrete world events worth recording (and re-checking) for the plan. */
   event(kind: "fishDropped" | "zoneEntered", now: number, detail: string): void {
     this.note(now, kind, undefined, detail);

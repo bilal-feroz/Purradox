@@ -108,12 +108,26 @@ pigeons.
   uses the same `PLAYER_STATS`, so picking a thief or hunter changes the
   character, not the physics. AI cats keep their own archetype stats.
 - **Perception, not omniscience.** Rival cats see with a 130° field of view,
-  a 20–24 m range and line-of-sight raycasts (3.5 m all-round awareness), keep
-  a 2.5 s memory and search where they last saw you. They **hear** typed sound
+  a 26–30 m range and line-of-sight raycasts (5.5 m all-round awareness), keep
+  a 4 s memory and search where they last saw you. They **hear** typed sound
   events with a radius and intensity: trash crash (15 m), pigeon burst (11 m),
   rolling bottle (10 m), fish scraps (9 m), laundry flap (8 m), footsteps
   (9 m sprinting, 5 m running) and the fishmonger's bell when the fish leaves
-  the table. What they do with a sound depends on their archetype.
+  the table. What they do with a sound depends on their archetype. Once the
+  bell has rung they also **smell** the fish in the thief's mouth, through
+  walls, within 30–40 m (twice a second), so a rival that loses sight of the
+  thief stays on its trail.
+- **Round 1 hunt.** The bell sets everyone off: whoever can see, hear or
+  smell the thief goes straight for it (0.15–0.2 s to react), the ambusher
+  runs to the chokepoint ahead and springs out when the thief slips past, and
+  after the theft nobody walks home: a rival left far behind stops sprinting
+  but keeps following. Up close a rival whose lunge isn't ready **hisses**
+  (the thief flinches for 0.5 s, the hisser slows too) and squares up beside
+  the thief instead of shoving it along a ledge. Fairness rules keep it
+  readable: one rival lunge at a time (at least 0.8 s apart, each with its
+  yellow **!**), at most two rivals pressing in while a third circles, and
+  rivals never lunge into an active hiss (waiting beats a premature hiss).
+  Rival top speed stays a few percent under the thief's.
 - **Round 1 stakes:** rival pounces cost Fish Grip (3 → 0). At zero the fish
   flies loose; a rival that grabs it runs for one of the street's escape
   points (carrying the fish slows it down). If it gets away, Round 1 is lost
@@ -211,8 +225,15 @@ that are still AI**, whichever thief and hunter were picked.
 The planner says **what** should happen; the coordinator hands each AI ally a
 mission; the cats' own state machines decide **how**.
 
-- Each ally walks the waypoint graph to its intercept, crouches and waits,
-  turns to face Past You, and only pounces on a Past You it can actually see.
+- **First strike.** An ally that can reach Past You's line well before its
+  planned intercept (and in the first half of the run) gets an opening
+  mission there first: Mochi, starting at the market exit, goes straight at
+  Past You in the market, then plays its part in the plan.
+- Each ally runs the waypoint graph to its intercept, crouches and waits,
+  and turns to face Past You. Any ally that **sees Past You within 12 m**
+  drops its post to chase and pounce (waiting out Past You's recorded hisses
+  and its grace window after a hit); once Past You gets 17 m away, or the
+  ally has only trailed it for 6 s, it hands back to the coordinator.
   Trappers stand beside their prop and spring it at Past You's recorded
   closest approach; they never pounce.
 - **Discrete re-planning only.** When a mission ends (its moment has passed
@@ -220,8 +241,12 @@ mission; the cats' own state machines decide **how**.
   reachable ahead of Past You from where that cat now stands (role-aware: a
   landing guard prefers landings, a cut-off prefers junctions). If none is
   reachable, the cat shadows Past You. Every decision is logged.
-- **Fairness:** AI helpers can wear Past You's grip down to 1 but never take
-  the last point. The steal belongs to the human.
+- **Fairness:** allies wear Past You's grip down anywhere, but only knock
+  the fish loose (and grab it) with the hunter in the fight, within 12 m;
+  far from you they stop at the last point, so the round is never won
+  without you. A loose fish nearer to you is left for you. Past You tightens
+  its grip again after 12 s without a hit (the thief does after 8 s), so the
+  council's early hits only count if the team keeps at it.
 - No AI ever snaps onto Past You's future coordinate: planned points are
   places on the street, and the cats still have to get there in real time.
 
@@ -291,12 +316,13 @@ see this.
 
 ## Verification
 
-- `npm run verify`: TypeScript, **71 unit tests** and a production build.
+- `npm run verify`: TypeScript, **74 unit tests** and a production build.
   Tests cover the replay engine, game-state machine (Choose Your Thief,
   the FISH LOST defeat, Esc → main menu from every screen), sprint stamina, Fish Grip rules, rewind history, level and nav-graph data,
   telemetry, the Behavior Profiler, the Counterfactual Simulator (trace
   analysis, hundreds of ranked candidates, feasible non-overlapping plans,
-  any pair of allies, fingerprint steering, habit focus), Alley Memory
+  any pair of allies, fingerprint steering, habit focus), the coordinator's
+  opening strike, Alley Memory
   (streaks, tie-breaks, storage failures, the bonus), the Tactical Planner,
   and the LLM layer's validation, timeout and failure fallbacks.
 - The debug harness (`?debug=1`, `window.__test`) plays complete

@@ -17,8 +17,8 @@ export class FishGrip {
   }
 
   /**
-   * Remove one grip point. `floor` lets helper cats wear Past You down
-   * without ever being the ones who knock the fish loose.
+   * Remove one grip point. `floor` lets helper cats (and traps) wear Past
+   * You down without knocking the fish loose while the hunter is far away.
    */
   damage(floor = 0): GripResult {
     const before = this.value;

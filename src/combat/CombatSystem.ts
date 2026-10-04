@@ -28,6 +28,9 @@ export interface CombatRules {
  */
 /** Extra reach at which a hiss repels an incoming pounce (metres). */
 const HISS_REPEL = 0.9;
+/** How long a hiss makes an opponent hesitate (a rival's hiss at the player is shorter). */
+const HESITATE = 0.9;
+const HESITATE_PLAYER = 0.5;
 
 export class CombatSystem {
   cats: CatActor[] = [];
@@ -159,7 +162,7 @@ export class CombatSystem {
       if (d > hisser.stats.hissRange || Math.abs(o.position.y - hisser.position.y) > 1.2) continue;
       if (!this.inHissCone(hisser, o)) continue;
       if (o.abilities.pounceState === "active") continue;
-      o.hesitate(0.9);
+      o.hesitate(o.mode === "player" && hisser.mode === "ai" ? HESITATE_PLAYER : HESITATE);
       this.bus.emit("hesitate", { cat: o.id, by: hisser.id });
     }
     this.effects.hissWave(hisser.position, Math.atan2(hisser.abilities.hissDir.x, hisser.abilities.hissDir.z), false);

@@ -38,7 +38,7 @@ jumps, pounces and hisses, while the other two cats carry out the council's plan
 
 Pounce beats bad positioning. Hiss beats a predictable pounce. Waiting beats a premature hiss.
 
-Whoever is holding the fish (a thief, or Past You in Round 2) wears a bobbing fish marker; when they leave the screen it pins to the edge with an arrow pointing at them. In Round 1, going 8 seconds without being hit lets the thief tighten its grip by one.
+Whoever is holding the fish (a thief, or Past You in Round 2) wears a bobbing fish marker; when they leave the screen it pins to the edge with an arrow pointing at them. In Round 1, going 8 seconds without being hit lets the thief tighten its grip by one; in Round 2 Past You does the same after 12 seconds.
 
 ## Run it
 
@@ -48,7 +48,7 @@ npm run dev        # http://localhost:5173
 ```
 
 ```bash
-npm run verify     # TypeScript check + 71 unit tests + production build
+npm run verify     # TypeScript check + 74 unit tests + production build
 npm run build      # static build in dist/ (relative paths, host anywhere)
 npm run preview    # serve the production build
 ```
@@ -101,7 +101,7 @@ Most game AI only reacts to the present. Here the human's run becomes a determin
 1. **Behavior Profiler** (`BehaviorProfiler.ts`): Round 1 telemetry becomes a fingerprint (speed, sprint and rooftop ratios, shortcut use, prop use, hiss / pounce rates, risk, route entropy, hesitation, backtracking) and evidence-backed tags such as `ROOFTOP RUNNER — 43% OF YOUR RUN WAS ABOVE STREET LEVEL.`
 2. **Counterfactual Simulator** (`CounterfactualSimulator.ts`): six strategy templates × every assignment of the three council cats to roles × candidate waypoints = about **2,200 complete plans**, each fast-forwarded against the recording (graph travel time + reaction delay vs when Past You really passes) and scored on intercept quality, coverage, route advantage, role fit, fingerprint fit and fairness penalties. About 20–35 ms, once per run.
 3. **Tactical Planner** (`TacticalPlanner.ts`): turns the winner into the council plan (strategy, ambush zones, a role and intercept per cat, prop traps) and explains it with evidence: *"You used 2 of 2 shortcuts. Both route splits are covered: Mochi at the Pigeon Courtyard, Soot at the Low Roofs."*
-4. **Multi-Agent Coordinator** (`Coordinator.ts`): in Round 2 the two AI allies get missions and re-plan only at discrete moments. The cats still walk there, need to see Past You and wind up their pounces; nothing snaps to a future position. Helpers can wear the grip down to 1, but only the player can knock the fish loose.
+4. **Multi-Agent Coordinator** (`Coordinator.ts`): in Round 2 the two AI allies get missions and re-plan only at discrete moments. An ally that can reach Past You well before its planned intercept strikes first on the way (Mochi at the market), and any ally that sees Past You close by drops its post to chase and pounce. The cats still walk there, need to see Past You and wind up their pounces; nothing snaps to a future position. Allies can knock the fish loose and take it themselves only with the hunter in the fight (within 12 m); otherwise they stop at the last grip point.
 
 Different habits really do produce different plans: a street run gets **THE ROOFTOP TRAP**, the same route with three distractions gets **THE BAIT**, and a both-shortcuts run gets **THE DOUBLE CUT**. The full write-up, with the scoring formula and an architecture diagram, is in [`docs/game-tech.md`](docs/game-tech.md).
 
@@ -112,6 +112,7 @@ An optional LLM layer can be plugged in server-side (see [`server/README.md`](se
 ### Presentation
 
 - **Alley Council map:** after RUN RECORDED and a wordless cut to the cats watching from the roof, a little map of Sardine Street draws your route while each council cat dashes to its simulated intercept. The card names you and the plan in two short lines, then **THEY KNOW YOUR ROUTE.**
+- **Rivals that hunt:** the fishmonger's bell sets every rival on you at once. They smell the fish through walls once it's stolen, keep on your trail instead of going home, hiss in your face, and lunge one at a time (each with a yellow **!**), two pressing in while a third circles.
 - **Losing as the thief:** if a rival knocks the fish loose, grabs it and reaches its escape point, Round 1 is lost: a **FISH LOST** card with TRY AGAIN or MAIN MENU.
 - **Juice:** comic MRRP! / HSSS! / MRAOW! over the cats (rate limited), ears that flick toward sounds, a fish that flops in your mouth, a sleeping market dog that opens one eye at chaos, a newspaper that blows down the alley when you dash past.
 - **Audio:** procedural SFX plus a rival's yowl, distant church bells and scooters. The Round 1 theme tightens as rivals close in or the final climb starts; Round 2 plays it reversed, lower and bent into the minor, with a ticking clock that grows as you close in on Past You.

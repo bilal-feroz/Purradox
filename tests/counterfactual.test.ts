@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { fingerprint } from "../src/ai/BehaviorProfiler";
 import { analyzeTrace, COUNTER_IDS, simulateCounterfactuals } from "../src/ai/CounterfactualSimulator";
 import { TelemetryTracker } from "../src/ai/TelemetrySummary";
+import { Coordinator } from "../src/ai/Coordinator";
+import { SPAWN } from "../src/data/level";
 import { agents, graph, syntheticRun } from "./helpers";
 
 describe("Counterfactual Simulator", () => {
@@ -60,5 +62,37 @@ describe("Counterfactual Simulator", () => {
     const ground = fingerprint({ ...TelemetryTracker.empty(), runDuration: 30, elevatedRatio: 0.05, averageSpeed: 5, zoneTime: { alley1: 5, alley2: 5 } });
     const posOf = (fp: ReturnType<typeof fingerprint>) => simulateCounterfactuals(trace, graph, agents(["mochi", "soot", "beans"]), fp).top.findIndex((c) => c.id === "rooftop_trap");
     expect(posOf(roofy)).toBeLessThanOrEqual(posOf(ground));
+  });
+});
+
+describe("Multi-Agent Coordinator", () => {
+  const replay = syntheticRun();
+  const trace = analyzeTrace(replay, graph);
+  const allies = agents(["mochi", "beans"]);
+
+  it("sends an ally near the market after Past You first, on its line and in time", () => {
+    const coord = new Coordinator(trace, graph);
+    coord.start([], allies);
+    const [x, y, z] = SPAWN.hunters.mochi.pos;
+    const strike = coord.firstStrike("mochi", { x, y, z }, Infinity);
+    expect(strike).not.toBeNull();
+    if (!strike) return;
+    expect(strike.role).toBe("early_pressure");
+    expect(strike.arriveAt).toBeLessThan(replay.duration * 0.5);
+    // reachable: Mochi gets there before Past You does
+    const from = graph.nearest(x, y, z);
+    const to = graph.nearest(...strike.point);
+    const travel = (Math.hypot(from.x - x, from.z - z) + graph.pathLength(graph.path(from, to))) / allies[0].speed;
+    expect(strike.arriveAt).toBeGreaterThan(travel);
+  });
+
+  it("skips the opening strike when the planned intercept already comes early", () => {
+    const coord = new Coordinator(trace, graph);
+    coord.start([], allies);
+    const [x, y, z] = SPAWN.hunters.mochi.pos;
+    const strike = coord.firstStrike("mochi", { x, y, z }, Infinity);
+    expect(strike).not.toBeNull();
+    expect(coord.firstStrike("mochi", { x, y, z }, (strike?.arriveAt ?? 0) + 3)).toBeNull();
+    expect(coord.firstStrike("soot", { x, y, z }, Infinity)).toBeNull();
   });
 });

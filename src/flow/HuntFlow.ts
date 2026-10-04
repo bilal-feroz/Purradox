@@ -22,6 +22,11 @@ const ECHO_DEEDS: Record<string, string> = {
 };
 /** Past You flashes its "!" this long before replaying a hiss or pounce. */
 const ECHO_TELL_LEAD = 0.3;
+/**
+ * Allies wear Past You's grip down anywhere, but only knock the fish loose
+ * when the hunter is this close (metres): in the fight, never without you.
+ */
+const ALLY_FINISH_RANGE = 12;
 
 /** HUNT → HUNT_COMPLETE → RESULTS */
 export function registerHuntFlow(g: Game): void {
@@ -43,7 +48,7 @@ export function registerHuntFlow(g: Game): void {
       g.resetWorld();
       g.round = 2;
       g.huntSuccess = false;
-      g.huntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, echoPerfectHisses: 0 };
+      g.huntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, stolenBy: null, echoPerfectHisses: 0 };
       g.history.clear();
       const hunter = g.actors[hunterId];
       const pastYou = g.runner;
@@ -87,20 +92,24 @@ export function registerHuntFlow(g: Game): void {
         ally.setForcedAction(null);
         brain.echoTime = () => g.echo.time;
         const m = missions.find((x) => x.cat === ally.id);
-        brain.setMissions(m ? [toMission(m)] : []);
+        // An ally that can meet Past You well before its planned intercept
+        // goes and harasses it first (Mochi at the market exit), then plays its part.
+        const first = coord?.firstStrike(ally.id, ally.position, m ? m.arriveAt : Infinity) ?? null;
+        brain.setMissions([first, m].filter((x): x is CoordMission => x !== null && x !== undefined).map(toMission));
         brain.onMissionEnded = (b) => {
           const next = coord?.missionEnded(b.id, b.actor.position, g.echo.time);
           if (next) b.setMissions([toMission(next)]);
         };
         brain.onTrap = (cat, prop) => g.trapPastYou(cat, prop);
-        g.debug?.log(`${ally.id}: ${m ? `${m.role} at ${m.zone} (${m.arriveAt.toFixed(1)}s)` : "shadow"}`);
+        g.debug?.log(`${ally.id}: ${first ? `first strike at ${first.zone} (${first.arriveAt.toFixed(1)}s), then ` : ""}${m ? `${m.role} at ${m.zone} (${m.arriveAt.toFixed(1)}s)` : "shadow"}`);
       }
       // Rules
       g.fish.reservedFor = pastYou;
-      g.fish.canPickup = (c) => c === pastYou || c === hunter;
+      // Any council cat may take the fish; allies only knock it loose with the hunter in the fight.
+      g.fish.canPickup = (c) => c === pastYou || c.team === hunter.team;
       g.fish.pickupGrip = (c, fromTable) => (c === pastYou ? (fromTable ? 3 : 1) : 3);
       g.combat.rules = {
-        gripFloor: (attacker) => (attacker === hunter ? 0 : 1),
+        gripFloor: (attacker, target) => (attacker === hunter || hunter.position.distanceTo(target.position) < ALLY_FINISH_RANGE ? 0 : 1),
         isLocal: (c) => c === hunter,
       };
       g.echo.onEvent = (ev) => {
@@ -208,9 +217,12 @@ export function registerHuntFlow(g: Game): void {
         }
         g.simulate(dt, 2);
         g.history.tick(g.huntTime);
-        if (g.fish.owner === hunter) {
+        const owner = g.fish.owner;
+        if (owner && owner !== g.runner && owner.team === hunter.team) {
+          // the hunter or an ally took it: the council broke the timeline
           g.huntSuccess = true;
           g.huntStats.stolenAt = g.echo.time;
+          g.huntStats.stolenBy = owner.id;
           g.fsm.transition(GameState.HUNT_COMPLETE);
           return;
         }
@@ -236,10 +248,13 @@ export function registerHuntFlow(g: Game): void {
       g.history.tick(g.huntTime, true);
       const hunter = g.controlled!;
       if (g.huntSuccess) {
-        if (g.huntStats.stolenAt !== null) recordSteal(g.huntStats.stolenAt);
+        // personal best steals are your own
+        if (g.huntStats.stolenAt !== null && g.huntStats.stolenBy === hunter.id) recordSteal(g.huntStats.stolenAt);
         g.echo.stop();
         g.time.slowMo(1.2, 0.35);
         hunter.setForcedAction("victory");
+        const by = g.huntStats.stolenBy ? g.actors[g.huntStats.stolenBy] : null;
+        if (by && by !== hunter) by.setForcedAction("victory");
         hunter.meow();
         g.audio.play("victory", { volume: 0.6 });
         g.audio.setTemporalHum(false);
@@ -260,6 +275,9 @@ export function registerHuntFlow(g: Game): void {
       const hunter = g.controlled!;
       if (g.huntSuccess) {
         hunter.updateScripted(dt);
+        // an ally that made the steal celebrates too
+        const by = g.huntStats.stolenBy ? g.actors[g.huntStats.stolenBy] : null;
+        if (by && by !== hunter) by.updateScripted(dt);
         const past = g.runner.rig.root;
         if (outcomeT > 0.35) past.visible = outcomeT < 0.4 ? true : Math.sin(outcomeT * 40) > 0 && outcomeT < 1.0;
         if (outcomeT > 1.0) past.visible = false;
@@ -299,12 +317,14 @@ export function registerHuntFlow(g: Game): void {
       const thief = CATS[g.runnerId].name.toUpperCase();
       const hunter = g.hunterId ? CATS[g.hunterId].name.toUpperCase() : "—";
       const stolenAt = g.huntStats.stolenAt ?? 0;
+      // an ally made the steal (with you in the fight)
+      const allyName = g.huntStats.stolenBy && g.huntStats.stolenBy !== g.hunterId ? CATS[g.huntStats.stolenBy].name.toUpperCase() : null;
       const rows: Array<[string, string]> = g.huntSuccess
         ? [
             ["FISH RUN", formatClock(runT)],
             ["ROUTE", route],
             ["COUNCIL PLAN", plan],
-            ["FISH STOLEN AT", formatClock(stolenAt)],
+            [allyName ? `${allyName} STOLE IT AT` : "FISH STOLEN AT", formatClock(stolenAt)],
             ["PERFECT HISSES", String((s?.perfectHisses ?? 0) + g.huntStats.perfectHisses)],
             ["PROPS USED", String(s?.interactions.length ?? 0)],
           ]
@@ -322,7 +342,11 @@ export function registerHuntFlow(g: Game): void {
         subtitle: `AS ${hunter} · VS PAST ${thief}`,
         share: {
           success: g.huntSuccess,
-          headline: g.huntSuccess ? `I STOLE A FISH FROM MYSELF IN ${stolenAt.toFixed(1)} SECONDS.` : `PAST ME OUTRAN ME IN ${runT.toFixed(1)} SECONDS.`,
+          headline: g.huntSuccess
+            ? allyName
+              ? `${allyName} AND I STOLE A FISH FROM PAST ME IN ${stolenAt.toFixed(1)} SECONDS.`
+              : `I STOLE A FISH FROM MYSELF IN ${stolenAt.toFixed(1)} SECONDS.`
+            : `PAST ME OUTRAN ME IN ${runT.toFixed(1)} SECONDS.`,
           facts: [`FISH RUN ${formatClock(runT)} · ${route}`, `THE ALLEY COUNCIL PLAYED ${plan}`, `HUNTED AS ${hunter} · PAST ${thief} RAN`],
           cat: g.hunterId,
         },

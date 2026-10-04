@@ -199,7 +199,7 @@ export function registerRunFlow(g: Game): void {
       g.temporalVignette.classList.remove("show");
       const p = g.runner.position;
       g.camera.setCinematic(new THREE.Vector3(p.x - 6, p.y + 6, p.z + 7), new THREE.Vector3(p.x + 4, p.y, p.z), 2, true);
-      g.huntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, echoPerfectHisses: 0 };
+      g.huntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, stolenBy: null, echoPerfectHisses: 0 };
       t = 0;
     },
     update: (dt) => {

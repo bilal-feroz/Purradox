@@ -61,6 +61,8 @@ export interface HuntStats {
   perfectHisses: number;
   interceptAttempts: number;
   stolenAt: number | null;
+  /** Round 2: which council cat took the fish (the hunter or an ally). */
+  stolenBy: CatId | null;
   echoPerfectHisses: number;
 }
 
@@ -83,6 +85,8 @@ function loadSettings(): Settings {
  */
 /** Round 1: seconds without a hit before the thief regains one grip. */
 const GRIP_RECOVER_SECONDS = 8;
+/** Past You takes longer: the council's hits stick for a while. */
+const ECHO_GRIP_RECOVER_SECONDS = 12;
 
 export class Game {
   readonly bus = new EventBus();
@@ -172,7 +176,7 @@ export class Game {
   thiefUnlocked = loadProgress().thiefUnlocked;
   runTime = 0;
   huntTime = 0;
-  huntStats: HuntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, echoPerfectHisses: 0 };
+  huntStats: HuntStats = { perfectHisses: 0, interceptAttempts: 0, stolenAt: null, stolenBy: null, echoPerfectHisses: 0 };
   huntSuccess = false;
   paused = false;
   /** Automation can skip rendering while fast-stepping the simulation. */
@@ -425,7 +429,14 @@ export class Game {
       this.dog.disturb(e, 14);
       this.newspaper.disturb(e, 6);
     });
-    this.bus.on("pounceHit", (e) => this.dog.disturb(e, 8));
+    this.bus.on("pounceHit", (e) => {
+      this.dog.disturb(e, 8);
+      // Round 2: let the hunter know the allies are working Past You over
+      // (a hit that knocks the fish loose already says FISH DROPPED!)
+      if (this.round === 2 && e.gripDamage && e.target === this.runnerId && this.fish.owner === this.runner && this.controlled && e.attacker !== this.controlled.id) {
+        this.alert(`${CATS[e.attacker as CatId].name.toUpperCase()} HIT PAST YOU!`, "info");
+      }
+    });
     this.bus.on("fishDrop", (e) => this.dog.disturb(e, 8));
     this.bus.on("hissStart", (e) => {
       this.dog.disturb(e, 6);
@@ -471,6 +482,7 @@ export class Game {
       } else {
         if (byRunner && e.recovered) this.alert("PAST YOU RECOVERED!", "recovered");
         if (this.controlled && e.cat === this.controlled.id) this.alert("FISH STOLEN!", "stolen");
+        else if (!byRunner) this.alert(`${CATS[e.cat as CatId].name.toUpperCase()} STOLE THE FISH!`, "stolen");
       }
     });
     this.bus.on("fishDrop", (e) => {
@@ -739,6 +751,9 @@ export class Game {
       quarry: q,
       quarryZone: z ? z.index : this.lastZoneIndex,
       rivalsMayCarry: round === 1,
+      teammate: round === 2 ? this.controlled : null,
+      pack: this.cats.filter((c) => c.mode === "ai"),
+      now: this.time.simTime,
       // What a cat can infer from watching: current position and motion.
       // (Even in Round 2 the agents never peek at Past You's recorded future;
       // only the planner, before the round, studies the whole trace.)
@@ -875,7 +890,9 @@ export class Game {
     this.physics.step(dt);
     this.combat.update();
     this.fish.update(dt, this.cats, this.time.simTime);
-    if (round === 1) this.updateGripRecovery(dt);
+    // the carrier tightens its grip after a clean spell: the thief in
+    // Round 1, Past You in Round 2 (so the council has to keep at it)
+    this.updateGripRecovery(dt);
     this.updateMusicPressure(dt, round);
     this.interactables.update(dt, this.time.simTime);
     this.pigeons.update(dt, this.cats);
@@ -1027,10 +1044,11 @@ export class Game {
       return;
     }
     this.gripCalmT += dt;
-    if (this.gripCalmT < GRIP_RECOVER_SECONDS) return;
+    if (this.gripCalmT < (this.round === 2 ? ECHO_GRIP_RECOVER_SECONDS : GRIP_RECOVER_SECONDS)) return;
     this.gripCalmT = 0;
     f.grip.reset(f.grip.value + 1);
     this.bus.emit("gripChanged", { cat: this.runnerId, grip: f.grip.value });
+    if (this.round === 2) this.alert("PAST YOU GRIPS TIGHTER", "info");
     this.effects.sparkle(this.tmp.copy(this.runner.position).setY(this.runner.position.y + 0.6), 8, 0xfff3b0, 1.4, 0.45);
     this.audio.play("pickup", { volume: 0.25, pitch: 1.2 });
   }
