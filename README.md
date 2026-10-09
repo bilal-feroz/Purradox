@@ -12,7 +12,7 @@ stop it and picks a counter-plan. In Round 2 you play as one of the rivals,
 hunting **Past You**: your thief replaying your exact run, with the same route,
 jumps, pounces and hisses, while the other two cats carry out the council's plan.
 
-> **Your first run creates your second opponent.**
+> **Your first run creates your 2nd opponent.**
 
 ▶ **Play:** <https://bilal-feroz.github.io/Purradox/> (desktop Chrome, keyboard + mouse)
 
